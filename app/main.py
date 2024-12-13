@@ -20,9 +20,9 @@ def parse_type(stream):
 def serve_client(s):
     data = s.recv(1024)
     if data:
-        print(data.decode())
-        if "PING" in data.decode():
-            s.send("+PONG\r\n".encode())
+        parse_type(data)
+        # if "PING" in data.decode():
+        #     s.send("+PONG\r\n".encode())
 
 def main():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True, backlog=5)
