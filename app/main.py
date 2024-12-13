@@ -6,8 +6,7 @@ def main():
     while True:
         data = conn.recv(1024)
         if data:
-            c = data.decode().replace('\\n', '\n')
-            commands = c.split('\n')[:-1]
+            commands = data.decode()
             print(f"Commands: {commands}, len = {len(commands)}")
             for command in commands:
                 if 'PING' in command:
