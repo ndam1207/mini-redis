@@ -1,6 +1,22 @@
 import socket
 import select
 
+def parse_array(stream):
+    n_args = stream[1]
+    print(f"{n_args} args. args = {stream}")
+
+def parse_bulk_string(stream):
+    pass
+
+def parse_type(stream):
+    cmd_type = stream[0]
+    match cmd_type:
+        case '*':
+            parse_array(stream)
+        case '$':
+            parse_bulk_string(stream)
+
+
 def serve_client(s):
     data = s.recv(1024)
     if data:
