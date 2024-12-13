@@ -8,7 +8,9 @@ def main():
         if data:
             c = data.decode().replace('\\n', '\n')
             commands = c.split('\n')[:-1]
+            print(f"Commands: {commands}, len = {len(commands)}")
             for command in commands:
-                conn.send("+PONG\r\n".encode())
+                if 'PING' in command:
+                    conn.send("+PONG\r\n".encode())
 if __name__ == "__main__":
     main()
