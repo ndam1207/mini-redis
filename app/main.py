@@ -9,7 +9,7 @@ def parse_bulk_string(stream):
     pass
 
 def parse_type(stream):
-    cmd_type = stream[0]
+    cmd_type = bytearray(stream)[0]
     print(cmd_type)
     match cmd_type:
         case '*':
