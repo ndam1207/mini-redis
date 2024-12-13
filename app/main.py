@@ -10,6 +10,7 @@ def parse_bulk_string(stream):
 
 def parse_type(stream):
     cmd_type = stream[0]
+    print(stream)
     match cmd_type:
         case '*':
             parse_array(stream)
