@@ -2,74 +2,92 @@ import socket
 import select
 
 COMMANDS = ['PING','ECHO', 'GET', 'SET']
+LEN_CRLF = 2
+db = {}
 
+def _readbytes(stream, length):
+    return stream[:length+LEN_CRLF]
 
-def get_echo_response(stream):
-    data, _ = parse_bulk_string(stream)
-    print(f"get_echo_response {data}")
-    return data
+def _readline(stream):
+    pos = stream.find(b"\r\n")
+    return stream[:pos]
 
-def get_cmd_response(stream, cmd):
-    print(f"[get_cmd_response] stream={stream} cmd={cmd}")
-    match cmd:
-        case 'ECHO':
-            return ''
-        case 'PING':
-            return b'+PONG\r\n'
+def execute_cmd(cmd, socket):
+    if cmd[0] == 'PING':
+        execute_ping(cmd, socket)
+    if cmd[0] == 'ECHO':
+        execute_echo(cmd, socket)
+    elif cmd[0] == 'SET':
+        execute_set(cmd, socket)
+    elif cmd[0] == 'GET':
+        execute_get(cmd, socket)
 
-def parse_array(stream):
-    num_args = int(stream[1]) - ord('0')
-    total_bytes_read = 4 # 2 bytes for type and array length, 2 bytes for \r\n
-    print(f"stream size = {len(stream)}, num_args={num_args}")
-    stream = stream[total_bytes_read:]
-    resps = []
-    r, bytes_read = parse_type(stream)
+def execute_ping(cmd, socket):
+    socket.send(b"+PONG\r\n")
+
+def execute_echo(cmd, socket):
+    if len(cmd) != 2:
+        socket.send(b"$-1\r\n")
+        return
+    print(f"[execute_echo] cmd = {cmd} msg={cmd[1]}\n")
+    msg = cmd[1]
+    resp = f"${len(msg)}\r\n{msg}\r\n"
+    socket.send(resp.encode())
+
+def execute_get(cmd, socket):
+    if len(cmd) != 2:
+        socket.send(b"$-1\r\n")
+        return
+    key = cmd[1]
+    if key not in db:
+        socket.send(b"$-1\r\n")
+        return
+    print(f"[execute_get] cmd = {cmd} key={cmd[1]}\n")
+    resp = f"${len(db[key])}\r\n{db[key]}\r\n"
+    socket.send(resp.encode())
+
+def execute_set(cmd, socket):
+    if len(cmd) != 3:
+        socket.send(b"$-1\r\n")
+        return
+    old_val, new_val = cmd[1], cmd[2]
+    print(f"[execute_set] cmd = {cmd} old_val={cmd[1]} new_val={cmd[2]}\n")
+    db[old_val] = new_val
+    socket.send(b"+OK\r\n")
+
+def parse_array(stream, num_args):
+    print(f"[parse_array] stream = {stream}, num_args={num_args}\n")
+    encoded_buffer = []
     for _ in range(num_args):
-        if total_bytes_read == len(stream):
-            break
-        r, bytes_read = parse_type(stream)
-        if len(r) > 0:
-            resps.append(r)
-        total_bytes_read += bytes_read
-        stream = stream[bytes_read:]
-        print(f"[parse_array] bytes read = {total_bytes_read} now stream = {stream}")
-    return resps, total_bytes_read
+        encoded_str, stream = parse_type(stream)
+        encoded_buffer.append(encoded_str)
+    return encoded_buffer, stream
 
-def parse_bulk_string(stream):
+def parse_bulk_string(stream, s_len):
     print(f"[parse_bulk_string] {stream}")
-    s_len = int(stream[1]) - ord('0')
-    print(s_len)
-    total_bytes_read = 4 + s_len + 2
-    data = stream[4:4+s_len].decode()
-    print(f"data = {data}")
-    if data in COMMANDS:
-        # _, bytes_read = get_cmd_response(stream, data)
-        # total_bytes_read += bytes_read
-        data = get_cmd_response(stream, data)
-        print(f"parsed data = {data}")
-        return data, total_bytes_read
-    print(f"[parse_bulk_string] data size = {s_len} now stream = {stream}")
-    print(f"[parse_bulk_string] data = {stream[:total_bytes_read]} total_bytes_read = {total_bytes_read}")
-    return stream[:total_bytes_read], total_bytes_read
-
+    bulk_str = _readline(stream).decode()
+    print(f"[parse_bulk_string] cmd={bulk_str}\n")
+    stream = stream[s_len+LEN_CRLF:]
+    return bulk_str, stream
 
 def parse_type(stream):
-    cmd_type = chr(stream[0])
-    match cmd_type:
-        case '*':
-            return parse_array(stream)
-        case '$':
-            return parse_bulk_string(stream)
+    header = _readline(stream)
+    stream = stream[len(header)+LEN_CRLF:]
+    header = header.decode()
+    cmd_type = header[0]
+    print(f"[parse_type] cmd_type={cmd_type} stream={stream}\n")
+    if cmd_type == '*':
+        num_args = int(header[1])
+        return parse_array(stream, num_args)
+    elif cmd_type == '$':
+        s_len = int(header[1])
+        return parse_bulk_string(stream, s_len)
 
 def serve_client(s):
     data = s.recv(1024)
     if data:
-        resps, _ = parse_type(data)
-        if type(resps) is list:
-            for r in resps:
-                s.send(r)
-        else:
-            s.send(f"+{resps}\r\n".encode())
+        cmd, _ = parse_type(data)
+        execute_cmd(cmd, s)
 
 def main():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True, backlog=5)
