@@ -1,16 +1,9 @@
 import socket
 import select
-
+from . import utils
 COMMANDS = ['PING','ECHO', 'GET', 'SET']
 LEN_CRLF = 2
 db = {}
-
-def _readbytes(stream, length):
-    return stream[:length+LEN_CRLF]
-
-def _readline(stream):
-    pos = stream.find(b"\r\n")
-    return stream[:pos]
 
 def execute_cmd(cmd, socket):
     if cmd[0] == 'PING':
@@ -21,6 +14,8 @@ def execute_cmd(cmd, socket):
         execute_set(cmd, socket)
     elif cmd[0] == 'GET':
         execute_get(cmd, socket)
+    else:
+        socket.send(b"$-1\r\n")
 
 def execute_ping(cmd, socket):
     socket.send(b"+PONG\r\n")
@@ -64,14 +59,13 @@ def parse_array(stream, num_args):
     return encoded_buffer, stream
 
 def parse_bulk_string(stream, s_len):
-    print(f"[parse_bulk_string] {stream}")
-    bulk_str = _readline(stream).decode()
-    print(f"[parse_bulk_string] cmd={bulk_str}\n")
+    bulk_str = utils._readline(stream).decode()
+    print(f"[parse_bulk_string] stream={stream} cmd={bulk_str}\n")
     stream = stream[s_len+LEN_CRLF:]
     return bulk_str, stream
 
 def parse_type(stream):
-    header = _readline(stream)
+    header = utils._readline(stream)
     stream = stream[len(header)+LEN_CRLF:]
     header = header.decode()
     cmd_type = header[0]
@@ -83,23 +77,23 @@ def parse_type(stream):
         s_len = int(header[1])
         return parse_bulk_string(stream, s_len)
 
-def serve_client(s):
-    data = s.recv(1024)
+def serve_client(socket):
+    data = socket.recv(1024)
     if data:
         cmd, _ = parse_type(data)
-        execute_cmd(cmd, s)
+        execute_cmd(cmd, socket)
 
 def main():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True, backlog=5)
     fds_to_watch = [server_socket]
     while True:
         ready_to_read, _, _ = select.select(fds_to_watch, [], [])
-        for s in ready_to_read:
-            if s == server_socket:
+        for socket in ready_to_read:
+            if socket == server_socket:
                 client_socket, addr = server_socket.accept()
                 fds_to_watch.append(client_socket)
             else:
-                serve_client(s)
+                serve_client(socket)
 
 
 if __name__ == "__main__":
