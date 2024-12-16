@@ -6,3 +6,6 @@ def _readbytes(stream, length):
 def _readline(stream):
     pos = stream.find(b"\r\n")
     return stream[:pos]
+
+def _ms_to_s(ms):
+    return 0.001*int(ms)
