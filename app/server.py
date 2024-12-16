@@ -7,7 +7,8 @@ class Server:
     def __init__(self, **kwargs):
         self._db = {}
         self.socket = socket.create_server(("localhost", 6379), reuse_port=True, backlog=5)
-        self._parse_args(**kwargs)
+        if kwargs:
+            self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
         for key, val in kwargs.items():
