@@ -1,10 +1,11 @@
 import select
+import argparse
 from . import server
 
 LEN_CRLF = 2
 
-def main():
-    redis_server = server.Server()
+def main(args):
+    redis_server = server.Server(**vars(args))
     fds_to_watch = [redis_server.socket]
     while True:
         ready_to_read, _, _ = select.select(fds_to_watch, [], [])
@@ -17,4 +18,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dir')
+    parser.add_argument('--dbfilename')
+    args = parser.parse_args()
+    main(args)

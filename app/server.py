@@ -3,11 +3,16 @@ from app import utils
 import socket
 from threading import Timer
 
-COMMANDS = ['PING','ECHO', 'GET', 'SET']
 class Server:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self._db = {}
         self.socket = socket.create_server(("localhost", 6379), reuse_port=True, backlog=5)
+        self._parse_args(**kwargs)
+
+    def _parse_args(self, **kwargs):
+        for key, val in kwargs.items():
+            self._db[key] = val
+            print(f"[_parse_args] key={key} val={val}")
 
     def _delete_key(self, *args):
         key = ''.join(args)
@@ -53,6 +58,17 @@ class Server:
             print(f"[_execute_set] expiry = {expiry}\n")
         client.send( b"+OK\r\n")
 
+    def _execute_config(self, client, cmd):
+        op = cmd[0]
+        if op == 'GET':
+            key = cmd[1]
+            print(f"[_execute_config] op={op} key={key}")
+            if key not in self._db:
+                client.send(b"$-1\r\n")
+                return
+            resp = f"*2\r\n${len(key)}\r\n{key}\r\n${len(self._db[key])}\r\n{self._db[key]}\r\n"
+            client.send(resp.encode())
+
     def execute_cmd(self, client, cmd):
         print(f"[execute_cmd] cmd={cmd}")
         if cmd[0] == 'PING':
@@ -63,6 +79,8 @@ class Server:
             self._execute_set(client, cmd)
         elif cmd[0] == 'GET':
             self._execute_get(client, cmd)
+        elif cmd[0] == 'CONFIG':
+            self._execute_config(client, cmd[1:])
         # else:
         #     client.send(b"$-1\r\n")
 
