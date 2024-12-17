@@ -82,8 +82,8 @@ class Server:
         print(self._db['dir'], self._db['dbfilename'])
 
         if key == '*':
-            # if not self._rdb:
-            #     self._get_db_image()
+            if not self._rdb:
+                self._get_db_image()
             keys = self._rdb.get_all_keys()
             resp = f"*{len(keys)}\r\n"
             if len(keys) > 0:
