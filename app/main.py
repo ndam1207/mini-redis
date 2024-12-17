@@ -1,6 +1,5 @@
-import select
-import argparse
 from . import server
+import select, argparse
 
 LEN_CRLF = 2
 

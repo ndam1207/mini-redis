@@ -1,9 +1,9 @@
-import io
 from app.utils import _readline
+import io
+
 LEN_CRLF = 2
 class Parser:
     def __init__(self, buffer=b""):
-        print(f"Called Parser. buffer = {buffer}")
         self._buffer = buffer
         self._commands = []
 
