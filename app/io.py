@@ -17,7 +17,6 @@ class RDB:
         self._db_size = 0
         if self._file_path:
             self._map_file(self._file_path)
-            # self._update_metadata()
 
     def _map_file(self, file_path):
         if os.path.isfile(file_path):

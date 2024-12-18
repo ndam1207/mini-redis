@@ -1,7 +1,4 @@
-from app.utils import _readline
-import io
-
-LEN_CRLF = 2
+from app.utils import _readline, LEN_CRLF
 class Parser:
     def __init__(self, buffer=b""):
         self._buffer = buffer

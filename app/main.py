@@ -1,7 +1,5 @@
-from . import server
+from app import server
 import select, argparse
-
-LEN_CRLF = 2
 
 def main(args):
     redis_server = server.Server(**vars(args))
