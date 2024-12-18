@@ -10,6 +10,9 @@ class RDB:
     REDIS_VER = b'\x09\x72\x65\x64\x69\x73\x2D\x76\x65\x72'
     ENCODE_MASK = 0b11
     ENCODE_SHIFT = 6
+    STRING_TYPE = b'\x00'
+    EXPIRY = b'\xfc'
+    EXPIRY_TIME_SIZE = 8
 
     def __init__(self, file_path=None):
         self._file_path = file_path
@@ -60,8 +63,14 @@ class RDB:
     def _get_key_val(self, key_section):
         start_pos, curr_pos = 0, 0
         key_type = _readbytes_exact(key_section, 1,start_pos)
+        key, value, expiry = None, None, 0
+        bytes_read = 0
         curr_pos += 1
-        if key_type == b'\x00':
+        if key_type == RDB.EXPIRY:
+            expiry = _readbytes_exact(key_section, RDB.EXPIRY_TIME_SIZE, curr_pos+1)
+            expiry = int.from_bytes(expiry, byteorder='little')
+            curr_pos = curr_pos + 1 + RDB.EXPIRY_TIME_SIZE
+        if key_type == RDB.STRING_TYPE:
             byte = _readbytes_exact(key_section, 1, curr_pos)
             key_size = self._parse_string_encode(byte)
             key = _readbytes_exact(key_section, key_size, curr_pos+1).decode()
@@ -71,7 +80,7 @@ class RDB:
             value = _readbytes_exact(key_section, value_size, curr_pos+1).decode()
             curr_pos = curr_pos + 1 + value_size
         bytes_read = curr_pos - start_pos
-        return key, value, bytes_read
+        return key, value, expiry, bytes_read
 
     def _get_key_section_start(self):
         tab_section = self._get_db_tab(self._buffer)
@@ -83,13 +92,14 @@ class RDB:
         print("[_locate_key]", key)
         key_section, num_keys = self._get_key_section_start()
         key_start = key_section.find(key.encode())
+        k, v, expiry = None, None, 0
         print(key_start)
         for _ in range(num_keys):
-            k, v, bytes_read = self._get_key_val(key_section)
+            k, v, expiry, bytes_read = self._get_key_val(key_section)
             if k == key:
-                return k, key_section[:bytes_read]
+                break
             key_section = key_section[bytes_read:]
-        return None, key_section
+        return k, v, expiry
 
     def _insert_key(self, key, key_start):
         pass
@@ -99,11 +109,10 @@ class RDB:
 
     def set_val(self, key, val):
         print(f"[_set_key] key={key}")
-        key, key_start = self._locate_key(key)
+        key, val, expiry = self._locate_key(key)
         # New key
-        if key == None:
+        if not key:
             pass
-        print(key_start)
 
     def get_val(self, key):
         db = self.get_all()
@@ -114,7 +123,9 @@ class RDB:
         key_section, num_keys = self._get_key_section_start()
         data = {}
         for _ in range(num_keys):
-            key, value, bytes_read = self._get_key_val(key_section)
+            key, value, expiry, bytes_read = self._get_key_val(key_section)
             key_section = key_section[bytes_read:]
-            data[key] = value
+            print(key_section)
+            if key:
+                data[key] = value
         return data
