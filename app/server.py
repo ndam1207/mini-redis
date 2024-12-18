@@ -5,7 +5,7 @@ class Server:
     def __init__(self, **kwargs):
         self._cache = {}
         self.socket = socket.create_server(("localhost", 6379), reuse_port=True, backlog=5)
-        self._rdb = None
+        self._rdb_snapshot = None
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -17,7 +17,7 @@ class Server:
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
         print(f"[_get_db_image] {rdb_path}")
-        self._rdb = io.RDB(rdb_path)
+        self._rdb_snapshot = io.RDB(rdb_path)
 
     def _delete_key(self, *args):
         key = ''.join(args)
@@ -42,16 +42,26 @@ class Server:
             client.send(b"$-1\r\n")
             return
         key = cmd[1]
-        if not self._rdb:
+        v = ""
+        if not self._rdb_snapshot:
             if key in self._cache:
-                val = self._cache[key]
+                v = self._cache[key]
             else:
                 client.send(b"$-1\r\n")
                 return
         else:
-            val = self._rdb.get_val(key)
+            k, v, expiry = self._rdb_snapshot.get_val(key)
+            if expiry < 0:
+                client.send(b"$-1\r\n")
+                return
+            elif expiry > 0:
+                t = Timer(expiry, self._delete_key, k)
+                t.start()
+                print(f"[_execute_get] expiry = {expiry}\n")
+            self._cache[k] = v
+
         print(f"[_execute_get] cmd = {cmd} key={cmd[1]}\n")
-        resp = f"${len(val)}\r\n{val}\r\n"
+        resp = f"${len(v)}\r\n{v}\r\n"
         client.send(resp.encode())
 
     def _execute_set(self, client, cmd):
@@ -61,10 +71,10 @@ class Server:
         key, val = cmd[1], cmd[2]
         print(f"[_execute_set] cmd = {cmd} key={cmd[1]} val={cmd[2]}\n")
         print(self._cache['dir'], self._cache['dbfilename'])
-        if not self._rdb:
+        if not self._rdb_snapshot:
             self._cache[key] = val
         else:
-            self._rdb.set_val(key, val)
+            self._rdb_snapshot.set_val(key, val)
          # With expiry
         if len(cmd) == 5:
             expiry = int(cmd[4])
@@ -90,7 +100,7 @@ class Server:
         print(self._cache['dir'], self._cache['dbfilename'])
 
         if key == '*':
-            keys = self._rdb.get_all()
+            keys = self._rdb_snapshot.get_all()
             resp = f"*{len(keys)}\r\n"
             if len(keys) > 0:
                 for k in keys:
@@ -102,7 +112,7 @@ class Server:
             pass
 
     def execute_cmd(self, client, cmd):
-        print(f"[execute_cmd] cmd={cmd}")
+        print(f"[execute_cmd] cmd={cmd}\n")
         if cmd[0] == 'PING':
             self._execute_ping(client)
         if cmd[0] == 'ECHO':

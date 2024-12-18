@@ -1,5 +1,5 @@
-import os, mmap
-from app.utils import _readbytes_exact, _writebytes_exact
+import os, mmap, time
+from app import utils
 
 class RDB:
     HEADER_MAGIC = b'\x52\x45\x44\x49\x53\x30\x30\x31\x31'
@@ -11,8 +11,10 @@ class RDB:
     ENCODE_MASK = 0b11
     ENCODE_SHIFT = 6
     STRING_TYPE = b'\x00'
-    EXPIRY = b'\xfc'
-    EXPIRY_TIME_SIZE = 8
+    EXPIRY_MS = b'\xfc'
+    EXPIRY_S = b'\xfd'
+    EXPIRY_TIME_MS_SIZE = 8
+    EXPIRY_TIME_S_SIZE = 4
 
     def __init__(self, file_path=None):
         self._file_path = file_path
@@ -62,38 +64,58 @@ class RDB:
 
     def _get_key_val(self, key_section):
         start_pos, curr_pos = 0, 0
-        key_type = _readbytes_exact(key_section, 1,start_pos)
+        key_type = utils._readbytes_exact(key_section, 1,start_pos)
         key, value, expiry = None, None, 0
         bytes_read = 0
-        curr_pos += 1
-        if key_type == RDB.EXPIRY:
-            expiry = _readbytes_exact(key_section, RDB.EXPIRY_TIME_SIZE, curr_pos+1)
+
+        # Parse expiry
+        if key_type == RDB.EXPIRY_MS:
+            curr_pos += 1
+            expiry = utils._readbytes_exact(key_section, RDB.EXPIRY_TIME_MS_SIZE, curr_pos)
             expiry = int.from_bytes(expiry, byteorder='little')
-            curr_pos = curr_pos + 1 + RDB.EXPIRY_TIME_SIZE
+            expiry = utils._ms_to_s(expiry) - time.time()
+
+            curr_pos = curr_pos + RDB.EXPIRY_TIME_MS_SIZE
+        elif key_type == RDB.EXPIRY_S:
+            curr_pos += 1
+            expiry = utils._readbytes_exact(key_section, RDB.EXPIRY_TIME_S_SIZE, curr_pos)
+            expiry = int.from_bytes(expiry, byteorder='little') - time.time()
+            curr_pos = curr_pos + RDB.EXPIRY_TIME_S_SIZE
+
+        key_type = utils._readbytes_exact(key_section, 1, curr_pos)
+
+        # Parse key type
         if key_type == RDB.STRING_TYPE:
-            byte = _readbytes_exact(key_section, 1, curr_pos)
+            curr_pos += 1
+            # Key (size encoding + key)
+            byte = utils._readbytes_exact(key_section, 1, curr_pos)
+            curr_pos += 1
             key_size = self._parse_string_encode(byte)
-            key = _readbytes_exact(key_section, key_size, curr_pos+1).decode()
-            curr_pos = curr_pos + 1 + key_size
-            byte = _readbytes_exact(key_section, 1, curr_pos)
+            key = utils._readbytes_exact(key_section, key_size, curr_pos).decode()
+            curr_pos = curr_pos + key_size
+
+            # Value (size encoding + value)
+            byte = utils._readbytes_exact(key_section, 1, curr_pos)
+            curr_pos += 1
             value_size = self._parse_string_encode(byte)
-            value = _readbytes_exact(key_section, value_size, curr_pos+1).decode()
-            curr_pos = curr_pos + 1 + value_size
+            value = utils._readbytes_exact(key_section, value_size, curr_pos).decode()
+            curr_pos = curr_pos + value_size
+
         bytes_read = curr_pos - start_pos
+        print(f"[_get_key_val] key={key} value={value} expiry={expiry}\n")
         return key, value, expiry, bytes_read
 
     def _get_key_section_start(self):
         tab_section = self._get_db_tab(self._buffer)
-        num_keys = _readbytes_exact(tab_section, 1)
+        num_keys = utils._readbytes_exact(tab_section, 1)
         key_section = tab_section[2:]
         return key_section, int.from_bytes(num_keys)
 
     def _locate_key(self, key):
-        print("[_locate_key]", key)
+        print(f"[_locate_key] {key}\n")
         key_section, num_keys = self._get_key_section_start()
         key_start = key_section.find(key.encode())
         k, v, expiry = None, None, 0
-        print(key_start)
         for _ in range(num_keys):
             k, v, expiry, bytes_read = self._get_key_val(key_section)
             if k == key:
@@ -107,19 +129,19 @@ class RDB:
     def delete_key(self, key):
         pass
 
-    def set_val(self, key, val):
-        print(f"[_set_key] key={key}")
+    def set_val(self, key, val, expiry=0):
+        print(f"[_set_key] key={key}\n")
         key, val, expiry = self._locate_key(key)
         # New key
         if not key:
             pass
 
     def get_val(self, key):
-        db = self.get_all()
-        return db[key] if key in db else None
+        k, v, expiry = self._locate_key(key)
+        return k, v, expiry
 
     def get_all(self):
-        print("[get_all]")
+        print("[get_all]\n")
         key_section, num_keys = self._get_key_section_start()
         data = {}
         for _ in range(num_keys):
