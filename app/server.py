@@ -3,27 +3,27 @@ from threading import Timer
 import socket, os, asyncio
 class Server:
     def __init__(self, **kwargs):
-        self._db = {}
+        self._cache = {}
         self.socket = socket.create_server(("localhost", 6379), reuse_port=True, backlog=5)
-        self._parse_args(**kwargs)
         self._rdb = None
+        self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
         for key, val in kwargs.items():
-            self._db[key] = val
-            print(f"[_parse_args] key={key} val={val}")
-
-        if self._db['dir'] and self._db['dbfilename']:
+            self._cache[key] = val
+        if self._cache['dir'] and self._cache['dbfilename']:
             self._get_db_image()
 
     def _get_db_image(self):
-        rdb_path = os.path.join(self._db['dir'], self._db['dbfilename'])
+        rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
+        print(f"[_get_db_image] {rdb_path}")
         self._rdb = io.RDB(rdb_path)
 
     def _delete_key(self, *args):
         key = ''.join(args)
         print(f"[_delete_key] key={key}")
-        del self._db[key]
+        if key in self._cache:
+            del self._cache[key]
 
     def _execute_ping(self, client):
         client.send(b"+PONG\r\n")
@@ -42,11 +42,16 @@ class Server:
             client.send(b"$-1\r\n")
             return
         key = cmd[1]
-        if key not in self._db:
-            client.send(b"$-1\r\n")
-            return
+        if not self._rdb:
+            if key in self._cache:
+                val = self._cache[key]
+            else:
+                client.send(b"$-1\r\n")
+                return
+        else:
+            val = self._rdb.get_val(key)
         print(f"[_execute_get] cmd = {cmd} key={cmd[1]}\n")
-        resp = f"${len(self._db[key])}\r\n{self._db[key]}\r\n"
+        resp = f"${len(val)}\r\n{val}\r\n"
         client.send(resp.encode())
 
     def _execute_set(self, client, cmd):
@@ -55,8 +60,11 @@ class Server:
             return
         key, val = cmd[1], cmd[2]
         print(f"[_execute_set] cmd = {cmd} key={cmd[1]} val={cmd[2]}\n")
-        self._db[key] = val
-
+        print(self._cache['dir'], self._cache['dbfilename'])
+        if not self._rdb:
+            self._cache[key] = val
+        else:
+            self._rdb.set_val(key, val)
          # With expiry
         if len(cmd) == 5:
             expiry = int(cmd[4])
@@ -70,21 +78,19 @@ class Server:
         if op == 'GET':
             key = cmd[2]
             print(f"[_execute_config] op={op} key={key}")
-            if key not in self._db:
+            if key not in self._cache:
                 client.send(b"$-1\r\n")
                 return
-            resp = f"*2\r\n${len(key)}\r\n{key}\r\n${len(self._db[key])}\r\n{self._db[key]}\r\n"
+            resp = f"*2\r\n${len(key)}\r\n{key}\r\n${len(self._cache[key])}\r\n{self._cache[key]}\r\n"
             client.send(resp.encode())
 
     def _execute_keys(self, client, cmd):
         key = cmd[1]
         print(f"[_execute_keys] key = {key}")
-        print(self._db['dir'], self._db['dbfilename'])
+        print(self._cache['dir'], self._cache['dbfilename'])
 
         if key == '*':
-            if not self._rdb:
-                self._get_db_image()
-            keys = self._rdb.get_all_keys()
+            keys = self._rdb.get_all()
             resp = f"*{len(keys)}\r\n"
             if len(keys) > 0:
                 for k in keys:
