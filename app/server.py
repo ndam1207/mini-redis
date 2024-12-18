@@ -120,9 +120,15 @@ class Server:
     def _execute_info(self, client, cmd):
         section = cmd[1]
         if self._cache['replicaof']:
-            client.send("$10\r\nrole:slave\r\n".encode())
+            role = "role:slave"
+            client.send(f"${len(role)}\r\n{role}\r\n".encode())
         else:
-            client.send("$11\r\nrole:master\r\n".encode())
+            role = "role:master"
+            master_replid = "master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+            master_repl_offset = "master_repl_offset:0"
+            resp_len = len(role) + len(master_replid) + len(master_repl_offset) + 4
+            resp = f"${resp_len}\r\n{role}\r\n{master_repl_offset}\r\n{master_replid}\r\n"
+            client.send(resp.encode())
 
     def execute_cmd(self, client, cmd):
         print(f"[execute_cmd] cmd={cmd}\n")
