@@ -1,18 +1,24 @@
 from app import parser, utils, io
 from threading import Timer
-import socket, os, asyncio
+import socket, os
 class Server:
     def __init__(self, **kwargs):
         self._cache = {}
-        self.socket = socket.create_server(("localhost", 6379), reuse_port=True, backlog=5)
+        self.socket = None
         self._rdb_snapshot = None
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
         for key, val in kwargs.items():
+            print(key, val)
             self._cache[key] = val
         if self._cache['dir'] and self._cache['dbfilename']:
             self._get_db_image()
+        if self._cache['port']:
+            port = int(self._cache['port'])
+        else:
+            port = 6379
+        self.socket = socket.create_server(("localhost", port), reuse_port=True, backlog=5)
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])

@@ -1,8 +1,9 @@
 from app import server
-import select, argparse
+import select, argparse, socket
 
 def main(args):
     redis_server = server.Server(**vars(args))
+    print(args.port)
     fds_to_watch = [redis_server.socket]
     while True:
         ready_to_read, _, _ = select.select(fds_to_watch, [], [])
@@ -18,5 +19,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dir')
     parser.add_argument('--dbfilename')
+    parser.add_argument('--port')
     args = parser.parse_args()
     main(args)
