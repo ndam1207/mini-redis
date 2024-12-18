@@ -19,5 +19,6 @@ if __name__ == "__main__":
     parser.add_argument('--dir')
     parser.add_argument('--dbfilename')
     parser.add_argument('--port')
+    parser.add_argument('--replicaof')
     args = parser.parse_args()
     main(args)

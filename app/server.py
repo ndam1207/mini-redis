@@ -119,7 +119,10 @@ class Server:
 
     def _execute_info(self, client, cmd):
         section = cmd[1]
-        client.send("$11\r\nrole:master\r\n".encode())
+        if self._cache['replicaof']:
+            client.send("$10\r\nrole:slave\r\n".encode())
+        else:
+            client.send("$11\r\nrole:master\r\n".encode())
 
     def execute_cmd(self, client, cmd):
         print(f"[execute_cmd] cmd={cmd}\n")
