@@ -117,6 +117,10 @@ class Server:
         else:
             pass
 
+    def _execute_info(self, client, cmd):
+        section = cmd[1]
+        client.send("$11\r\nrole:master\r\n".encode())
+
     def execute_cmd(self, client, cmd):
         print(f"[execute_cmd] cmd={cmd}\n")
         if cmd[0] == 'PING':
@@ -131,6 +135,8 @@ class Server:
             self._execute_config(client, cmd)
         elif cmd[0] == 'KEYS':
             self._execute_keys(client, cmd)
+        elif cmd[0] == 'INFO':
+            self._execute_info(client, cmd)
         # else:
         #     client.send(b"$-1\r\n")
 

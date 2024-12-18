@@ -3,7 +3,6 @@ import select, argparse, socket
 
 def main(args):
     redis_server = server.Server(**vars(args))
-    print(args.port)
     fds_to_watch = [redis_server.socket]
     while True:
         ready_to_read, _, _ = select.select(fds_to_watch, [], [])
