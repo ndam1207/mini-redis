@@ -78,6 +78,10 @@ class Server:
     def _execute_replconf(self, client):
         client.send(b"+OK\r\n")
 
+    def _execute_psync(self, client, cmd):
+        repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+        client.send(f"+FULLRESYNC {repl_id} 0\r\n".decode())
+
     def _execute_echo(self, client, cmd):
         if len(cmd) != 2:
             client.send(b"$-1\r\n")
@@ -180,6 +184,8 @@ class Server:
             self._execute_ping(client)
         elif cmd[0] == 'REPLCONF':
             self._execute_replconf(client)
+        elif cmd[0] == 'PSYNC':
+            self._execute_psync(client, cmd)
         if cmd[0] == 'ECHO':
             self._execute_echo(client, cmd)
         elif cmd[0] == 'SET':
