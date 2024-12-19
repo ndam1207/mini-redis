@@ -2,23 +2,40 @@ from app import parser, utils, io
 from threading import Timer
 import socket, os
 class Server:
+    DEFAULT_PORT = 6379
+
     def __init__(self, **kwargs):
         self._cache = {}
         self.socket = None
         self._rdb_snapshot = None
+        self._master = True
+        self._master_socket = None
+        self._master_port = -1
+        self._master_hostname = None
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
         for key, val in kwargs.items():
-            print(key, val)
+            print(key,val)
             self._cache[key] = val
         if self._cache['dir'] and self._cache['dbfilename']:
             self._get_db_image()
         if self._cache['port']:
             port = int(self._cache['port'])
         else:
-            port = 6379
+            port = Server.DEFAULT_PORT
         self.socket = socket.create_server(("localhost", port), reuse_port=True, backlog=5)
+        if self._cache['replicaof']:
+            self._master = False
+            master_info = self._cache['replicaof'].split()
+            self._master_hostname = str(master_info[0])
+            self._master_port = int(master_info[1])
+            self._master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._master_socket.connect((self._master_hostname, self._master_port))
+            self._handshake()
+
+    def _handshake(self):
+        self._master_socket.send("*1\r\n$4\r\nPING\r\n".encode())
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
@@ -119,7 +136,7 @@ class Server:
 
     def _execute_info(self, client, cmd):
         section = cmd[1]
-        if self._cache['replicaof']:
+        if not self._master:
             role = "role:slave"
             client.send(f"${len(role)}\r\n{role}\r\n".encode())
         else:
