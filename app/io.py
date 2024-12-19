@@ -6,7 +6,6 @@ class RDB:
     META_START = b'\xfa'
     DB_START = b'\xfe'
     HASH_TAB_START = b'\xfb'
-    EOF = b'\xff'
     REDIS_VER = b'\x09\x72\x65\x64\x69\x73\x2D\x76\x65\x72'
     ENCODE_MASK = 0b11
     ENCODE_SHIFT = 6
@@ -15,6 +14,7 @@ class RDB:
     EXPIRY_S = b'\xfd'
     EXPIRY_TIME_MS_SIZE = 8
     EXPIRY_TIME_S_SIZE = 4
+    EOF = b'\xff'
 
     def __init__(self, file_path=None):
         self._file_path = file_path
@@ -32,6 +32,7 @@ class RDB:
         self._buffer.close()
 
     def _db_sync(self):
+        #TODO: implement caching
         pass
 
     def _get_db_section(self, buffer):
