@@ -37,16 +37,16 @@ class Server:
     def _handshake(self):
         # PING
         self._master_socket.send("*1\r\n$4\r\nPING\r\n".encode())
-        data = self._master_socket.recv(1024)
-        print(data.decode())
+        resp = self._master_socket.recv(1024)
+        print(resp)
         # REPLCONF 1
         self._master_socket.send(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${len(str(self._port))}\r\n{self._port}\r\n".encode())
-        data = self._master_socket.recv(1024)
-        print(data.decode())
+        resp = self._master_socket.recv(1024)
+        print(resp)
         # REPLCONF 2
         self._master_socket.send(f"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n".encode())
-        data = self._master_socket.recv(1024)
-        print(data.decode())
+        resp = self._master_socket.recv(1024)
+        print(resp)
         # PSYNC
 
     def _get_db_image(self):
