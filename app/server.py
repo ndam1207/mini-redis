@@ -80,7 +80,7 @@ class Server:
 
     def _execute_psync(self, client, cmd):
         repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
-        client.send(f"+FULLRESYNC {repl_id} 0\r\n".decode())
+        client.send(f"+FULLRESYNC {repl_id} 0\r\n".encode())
 
     def _execute_echo(self, client, cmd):
         if len(cmd) != 2:
