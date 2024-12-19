@@ -3,6 +3,7 @@ from threading import Timer
 import socket, os
 class Server:
     DEFAULT_PORT = 6379
+    EMPTY_RDB_FILE = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
 
     def __init__(self, **kwargs):
         self.socket = None
@@ -81,6 +82,8 @@ class Server:
     def _execute_psync(self, client, cmd):
         repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
         client.send(f"+FULLRESYNC {repl_id} 0\r\n".encode())
+        rdb_file = bytes.fromhex(Server.EMPTY_RDB_FILE)
+        client.send(f"${len(rdb_file)}\r\n".encode() + rdb_file)
 
     def _execute_echo(self, client, cmd):
         if len(cmd) != 2:
