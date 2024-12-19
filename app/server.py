@@ -5,8 +5,8 @@ class Server:
     DEFAULT_PORT = 6379
 
     def __init__(self, **kwargs):
-        self._cache = {}
         self.socket = None
+        self._cache = {}
         self._port = Server.DEFAULT_PORT
         self._rdb_snapshot = None
         self._master = True
@@ -32,10 +32,16 @@ class Server:
             self._master_port = int(master_info[1])
             self._master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._master_socket.connect((self._master_hostname, self._master_port))
-            self._handshake()
+            self._handshake_slave()
+        else:
+            self._handshake_master()
 
-    def _handshake(self):
-        print("----HANDSHAKE----")
+    def _handshake_master(self):
+        print("----HANDSHAKE FROM MASTER----")
+        #TODO: add state control for handshake
+
+    def _handshake_slave(self):
+        print("----HANDSHAKE FROM SLAVE----")
         # PING
         self._master_socket.send("*1\r\n$4\r\nPING\r\n".encode())
         resp = self._master_socket.recv(1024)
@@ -68,6 +74,9 @@ class Server:
 
     def _execute_ping(self, client):
         client.send(b"+PONG\r\n")
+
+    def _execute_replconf(self, client):
+        client.send(b"+OK\r\n")
 
     def _execute_echo(self, client, cmd):
         if len(cmd) != 2:
@@ -169,6 +178,8 @@ class Server:
         print(f"[execute_cmd] cmd={cmd}\n")
         if cmd[0] == 'PING':
             self._execute_ping(client)
+        elif cmd[0] == 'REPLCONF':
+            self._execute_replconf(client)
         if cmd[0] == 'ECHO':
             self._execute_echo(client, cmd)
         elif cmd[0] == 'SET':
