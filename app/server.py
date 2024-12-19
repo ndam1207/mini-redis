@@ -38,17 +38,16 @@ class Server:
         # PING
         self._master_socket.send("*1\r\n$4\r\nPING\r\n".encode())
         data = self._master_socket.recv(1024)
+        print(data.decode())
         # REPLCONF 1
-        print(data.decode())
-        self._master_socket.send(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port \
-                                 \r\n${len(str(self._port))}\r\n{self._port}\r\n".encode())
+        self._master_socket.send(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${len(str(self._port))}\r\n{self._port}\r\n".encode())
         data = self._master_socket.recv(1024)
-        # REPLCONF 2
         print(data.decode())
+        # REPLCONF 2
         self._master_socket.send(f"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n".encode())
         data = self._master_socket.recv(1024)
+        print(data.decode())
         # PSYNC
-
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
