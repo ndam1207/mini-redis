@@ -35,12 +35,15 @@ class Server:
             self._handshake()
 
     def _handshake(self):
+        print("----HANDSHAKE----")
         # PING
         self._master_socket.send("*1\r\n$4\r\nPING\r\n".encode())
         resp = self._master_socket.recv(1024)
         print(resp)
         # REPLCONF 1
-        self._master_socket.send(f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${len(str(self._port))}\r\n{self._port}\r\n".encode())
+        self._master_socket.send(
+                f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${len(str(self._port))}\r\n{self._port}\r\n".encode()
+            )
         resp = self._master_socket.recv(1024)
         print(resp)
         # REPLCONF 2
@@ -48,6 +51,9 @@ class Server:
         resp = self._master_socket.recv(1024)
         print(resp)
         # PSYNC
+        self._master_socket.send(f"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n".encode())
+        resp = self._master_socket.recv(1024)
+        print(resp)
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
