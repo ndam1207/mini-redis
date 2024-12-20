@@ -4,6 +4,8 @@ import select, argparse, socket
 def main(args):
     redis_server = server.Server(**vars(args))
     fds_to_watch = [redis_server.socket]
+    if not redis_server.master:
+        fds_to_watch.append(redis_server.master_socket)
     while True:
         ready_to_read, _, _ = select.select(fds_to_watch, [], [])
         for s in ready_to_read:

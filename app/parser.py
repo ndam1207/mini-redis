@@ -1,4 +1,5 @@
-from app.utils import _readline, LEN_CRLF
+from app.utils import _readline, _readbytes_exact, LEN_CRLF
+from app.io import RDB
 class Parser:
     def __init__(self, buffer=b""):
         self._buffer = buffer
@@ -6,16 +7,21 @@ class Parser:
 
     def _parse_array(self, num_args):
         print(f"[_parse_array] buffer = {self._buffer}, num_args={num_args}\n")
+        commands = []
         for _ in range(num_args):
-            self.parse_stream()
+            self._parse_stream()
 
     def _parse_bulk_string(self, s_len):
+        header = _readbytes_exact(self._buffer, 9)
+        if header == RDB.HEADER_MAGIC:
+            print(header)
+            return
         bulk_str = _readline(self._buffer).decode()
         print(f"[_parse_bulk_string] buffer={self._buffer} cmd={bulk_str}\n")
         self._buffer = self._buffer[s_len+LEN_CRLF:]
         self._commands.append(bulk_str)
 
-    def parse_stream(self):
+    def _parse_stream(self):
         header = _readline(self._buffer)
         self._buffer = self._buffer[len(header)+LEN_CRLF:]
         header = header.decode()
@@ -27,4 +33,8 @@ class Parser:
         elif cmd_type == '$':
             s_len = int(header[1:])
             self._parse_bulk_string(s_len)
+
+    def parse_data(self):
+        while self._buffer:
+            self._parse_stream()
         return self._commands

@@ -5,16 +5,18 @@ class Server:
     DEFAULT_PORT = 6379
     EMPTY_RDB_FILE = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
     PROPAGATE_LIST = ['SET', 'DEL']
+    COMMANDS = ['PING', 'ECHO', 'SET', 'GET', 'REPLCONF', 'PSYNC', 'KEYS', 'INFO', 'CONFIG']
 
     def __init__(self, **kwargs):
+        self.master= True
+        self.master_socket = None
+        self._master_port = -1
+        self._master_hostname = None
         self.socket = None
         self._cache = {}
         self._port = Server.DEFAULT_PORT
         self._rdb_snapshot = None
-        self._master = True
-        self._master_socket = None
-        self._master_port = -1
-        self._master_hostname = None
+
         self._connections = []
         self._parse_args(**kwargs)
 
@@ -29,12 +31,12 @@ class Server:
 
         self.socket = socket.create_server(("localhost", self._port), reuse_port=True, backlog=5)
         if self._cache['replicaof']:
-            self._master = False
+            self.master = False
             master_info = self._cache['replicaof'].split()
             self._master_hostname = str(master_info[0])
             self._master_port = int(master_info[1])
-            self._master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._master_socket.connect((self._master_hostname, self._master_port))
+            self.master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.master_socket.connect((self._master_hostname, self._master_port))
             self._handshake_slave()
 
     def _handshake_master(self):
@@ -44,23 +46,30 @@ class Server:
     def _handshake_slave(self):
         print("----HANDSHAKE FROM SLAVE----")
         # PING
-        self._master_socket.send("*1\r\n$4\r\nPING\r\n".encode())
-        resp = self._master_socket.recv(1024)
+        self.master_socket.send("*1\r\n$4\r\nPING\r\n".encode())
+        resp = self.master_socket.recv(1024)
         print(resp)
         # REPLCONF 1
-        self._master_socket.send(
+        self.master_socket.send(
                 f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${len(str(self._port))}\r\n{self._port}\r\n".encode()
             )
-        resp = self._master_socket.recv(1024)
+        resp = self.master_socket.recv(1024)
         print(resp)
         # REPLCONF 2
-        self._master_socket.send(f"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n".encode())
-        resp = self._master_socket.recv(1024)
+        self.master_socket.send(f"*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n".encode())
+        resp = self.master_socket.recv(1024)
         print(resp)
         # PSYNC
-        self._master_socket.send(f"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n".encode())
-        resp = self._master_socket.recv(1024)
+        self.master_socket.send(f"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n".encode())
+        resp = self.master_socket.recv(1024)
         print(resp)
+
+        if self.master_socket not in self._connections:
+            self._connections.append(self.master_socket)
+
+        # Get RDB file
+        # while True:
+        #     self.serve_client(self.master_socket)
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
@@ -104,24 +113,25 @@ class Server:
             return
         key = cmd[1]
         v = ""
-        if not self._rdb_snapshot:
-            if key in self._cache:
-                v = self._cache[key]
-            else:
-                client.send(b"$-1\r\n")
-                return
+        if key in self._cache:
+            v = self._cache[key]
         else:
-            k, v, expiry = self._rdb_snapshot.get_val(key)
-            if expiry < 0:
-                client.send(b"$-1\r\n")
-                return
-            elif expiry > 0:
-                t = Timer(expiry, self._delete_key, k)
-                t.start()
-                print(f"[_execute_get] expiry = {expiry}\n")
-            self._cache[k] = v
+            if self._rdb_snapshot:
+                k, v, expiry = self._rdb_snapshot.get_val(key)
+                if expiry < 0:
+                    client.send(b"$-1\r\n")
+                    return
+                elif expiry > 0:
+                    t = Timer(expiry, self._delete_key, k)
+                    t.start()
+                    print(f"[_execute_get] expiry = {expiry}\n")
+                self._cache[k] = v
 
         print(f"[_execute_get] cmd = {cmd} key={cmd[1]}\n")
+        print(self._cache.items())
+        if not v:
+            client.send(b"$-1\r\n")
+            return
         resp = f"${len(v)}\r\n{v}\r\n"
         client.send(resp.encode())
 
@@ -133,6 +143,7 @@ class Server:
         print(f"[_execute_set] cmd = {cmd} key={cmd[1]} val={cmd[2]}\n")
         print(self._cache['dir'], self._cache['dbfilename'])
         if not self._rdb_snapshot:
+            print("Saving to cache")
             self._cache[key] = val
         else:
             self._rdb_snapshot.set_val(key, val)
@@ -142,6 +153,8 @@ class Server:
             t = Timer(utils._ms_to_s(expiry), self._delete_key, key)
             t.start()
             print(f"[_execute_set] expiry = {expiry}\n")
+        print(self._cache.items())
+        # if not self.master and client != self.master_socket:
         client.send( b"+OK\r\n")
 
     def _execute_config(self, client, cmd):
@@ -174,7 +187,7 @@ class Server:
 
     def _execute_info(self, client, cmd):
         section = cmd[1]
-        if not self._master:
+        if not self.master:
             role = "role:slave"
             client.send(f"${len(role)}\r\n{role}\r\n".encode())
         else:
@@ -213,11 +226,37 @@ class Server:
         for c in self._connections:
             c.send(data)
 
+    def _split_cmd(self, parsed):
+        cmds = []
+        cmd = None
+        args = []
+        for item in parsed:
+            if item in Server.COMMANDS:
+                if cmd == 'CONFIG':
+                    args.append(item)
+                    continue
+                elif cmd:
+                    cmds.append([cmd] + args)
+                cmd = item
+                args = []
+            else:
+                args.append(item)
+        if cmd:
+            cmds.append([cmd] + args)
+        return cmds
+
+    def _parse_data(self, client, data):
+        p = parser.Parser(data)
+        parsed = p.parse_data()
+        print(self._split_cmd(parsed))
+        for c in self._split_cmd(parsed):
+            if self.master and c[0] in Server.PROPAGATE_LIST:
+                self._broadcast(data)
+            self.execute_cmd(client, c)
+
     def serve_client(self, client):
         data = client.recv(1024)
         if data:
-            p = parser.Parser(data)
-            cmd = p.parse_stream()
-            if self._master and cmd[0] in Server.PROPAGATE_LIST:
-                self._broadcast(data)
-            self.execute_cmd(client, cmd)
+            print(data)
+            self._parse_data(client, data)
+
