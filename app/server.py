@@ -14,6 +14,7 @@ class Server:
         self._master_socket = None
         self._master_port = -1
         self._master_hostname = None
+        self._connections = []
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -84,6 +85,10 @@ class Server:
         client.send(f"+FULLRESYNC {repl_id} 0\r\n".encode())
         rdb_file = bytes.fromhex(Server.EMPTY_RDB_FILE)
         client.send(f"${len(rdb_file)}\r\n".encode() + rdb_file)
+
+        # Avoid duplicated handshake
+        if client not in self._connections:
+            self._connections.append(client)
 
     def _execute_echo(self, client, cmd):
         if len(cmd) != 2:
@@ -204,9 +209,16 @@ class Server:
         # else:
         #     client.send(b"$-1\r\n")
 
+    def _broadcast(self, data):
+        print("[Broadcasting]", data)
+        for c in self._connections:
+            c.send(data)
+
     def serve_client(self, client):
         data = client.recv(1024)
         if data:
+            if self._master:
+                self._broadcast(data)
             p = parser.Parser(data)
             cmd = p.parse_stream()
             self.execute_cmd(client, cmd)
