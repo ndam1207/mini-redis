@@ -4,6 +4,7 @@ import socket, os
 class Server:
     DEFAULT_PORT = 6379
     EMPTY_RDB_FILE = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
+    PROPAGATE_LIST = ['SET', 'DEL']
 
     def __init__(self, **kwargs):
         self.socket = None
@@ -35,8 +36,6 @@ class Server:
             self._master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._master_socket.connect((self._master_hostname, self._master_port))
             self._handshake_slave()
-        else:
-            self._handshake_master()
 
     def _handshake_master(self):
         print("----HANDSHAKE FROM MASTER----")
@@ -217,8 +216,8 @@ class Server:
     def serve_client(self, client):
         data = client.recv(1024)
         if data:
-            if self._master:
-                self._broadcast(data)
             p = parser.Parser(data)
             cmd = p.parse_stream()
+            if self._master and cmd[0] in Server.PROPAGATE_LIST:
+                self._broadcast(data)
             self.execute_cmd(client, cmd)
