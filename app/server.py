@@ -216,7 +216,7 @@ class Server:
             client.send(":0\r\n".encode())
             return
         print(self._connections)
-        wait_time = int(cmd[2])
+        wait_time = utils._ms_to_s(int(cmd[2]))
         client.send(f":{len(self._connections)}\r\n".encode())
 
 
