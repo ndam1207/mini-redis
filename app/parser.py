@@ -6,8 +6,7 @@ class Parser:
         self._commands = []
 
     def _parse_array(self, num_args):
-        print(f"[_parse_array] buffer = {self._buffer}, num_args={num_args}\n")
-        commands = []
+        # print(f"[_parse_array] buffer = {self._buffer}, num_args={num_args}\n")
         for _ in range(num_args):
             self._parse_stream()
 
@@ -19,7 +18,7 @@ class Parser:
             self._buffer = self._buffer[s_len:]
             return
         bulk_str = _readline(self._buffer).decode()
-        print(f"[_parse_bulk_string] buffer={self._buffer} cmd={bulk_str}\n")
+        # print(f"[_parse_bulk_string] buffer={self._buffer} cmd={bulk_str}\n")
         self._buffer = self._buffer[s_len+LEN_CRLF:]
         self._commands.append(bulk_str)
 

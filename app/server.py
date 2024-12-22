@@ -18,6 +18,8 @@ class Server:
         self._port = Server.DEFAULT_PORT
         self._rdb_snapshot = None
         self._connections = []
+        self._parsed_bytes = -1
+        self._handshake_done = False
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -62,6 +64,7 @@ class Server:
         # PSYNC
         self.master_socket.send(f"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n".encode())
         resp = self.master_socket.recv(1024)
+        self._handshake_done = True
         print(resp)
         self._parse_data(self.master_socket, resp)
 
@@ -81,20 +84,25 @@ class Server:
             del self._cache[key]
 
     def _execute_ping(self, client):
-        client.send(b"+PONG\r\n")
+        if client is not self.master_socket:
+            client.send(b"+PONG\r\n")
+        if client is self.master_socket and not self._handshake_done:
+            client.send(b"+PONG\r\n")
 
     def _execute_replconf(self, client, cmd):
         if cmd[1].lower() == "capa" or cmd[1].lower() == "listening-port":
             client.send(b"+OK\r\n")
         elif cmd[1].upper() == "GETACK":
-            client.send("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n".encode())
+            if self._parsed_bytes == -1:
+                self._parsed_bytes = 0
+            client.send(f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(self._parsed_bytes))}\r\n{str(self._parsed_bytes)}\r\n".encode())
 
     def _execute_psync(self, client):
         repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
         client.send(f"+FULLRESYNC {repl_id} 0\r\n".encode())
         rdb_file = bytes.fromhex(Server.EMPTY_RDB_FILE)
         client.send(f"${len(rdb_file)}\r\n".encode() + rdb_file)
-
+        self._handshake_done = True
         # Avoid duplicated handshake
         if client not in self._connections:
             self._connections.append(client)
@@ -155,8 +163,8 @@ class Server:
             t.start()
             print(f"[_execute_set] expiry = {expiry}\n")
         print(self._cache.items())
-        # if not self.master and client != self.master_socket:
-        client.send( b"+OK\r\n")
+        if client is not self.master_socket:
+            client.send( b"+OK\r\n")
 
     def _execute_config(self, client, cmd):
         op = cmd[1]
@@ -249,7 +257,16 @@ class Server:
     def _parse_data(self, client, data):
         p = parser.Parser(data)
         parsed = p.parse_data()
-        print(self._split_cmd(parsed))
+
+        ack_pos = data.find(b"GETACK")
+        ack_end = ack_pos + data[ack_pos:].find(b"*\r\n") + utils.LEN_CRLF
+        if self._parsed_bytes != -1:
+            if ack_pos:
+                print(f"ackpos = {ack_pos} stream = {data[ack_pos:]}")
+                self._parsed_bytes += len(data[:ack_end+1])
+            else:
+                self._parsed_bytes += len(data)
+
         for c in self._split_cmd(parsed):
             if self.master and c[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
@@ -258,6 +275,6 @@ class Server:
     def serve_client(self, client):
         data = client.recv(1024)
         if data:
-            print(data)
+            print(data, len(data))
             self._parse_data(client, data)
 
