@@ -95,7 +95,10 @@ class Server:
         elif cmd[1].upper() == "GETACK":
             if self._parsed_bytes == -1:
                 self._parsed_bytes = 0
-            client.send(f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(self._parsed_bytes))}\r\n{str(self._parsed_bytes)}\r\n".encode())
+            client.send(
+                f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(self._parsed_bytes))}\r\n{str(self._parsed_bytes)}\r\n" \
+                .encode()
+                )
 
     def _execute_psync(self, client):
         repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
@@ -208,7 +211,14 @@ class Server:
             client.send(resp.encode())
 
     def _execute_wait(self, client, cmd):
-        client.send(":0\r\n".encode())
+        num_waits = int(cmd[1])
+        if num_waits == 0:
+            client.send(":0\r\n".encode())
+            return
+        print(self._connections)
+        wait_time = int(cmd[2])
+        client.send(f":{len(self._connections)}\r\n".encode())
+
 
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
@@ -231,7 +241,6 @@ class Server:
         elif cmd[0] == 'INFO':
             self._execute_info(client, cmd)
         elif cmd[0] == 'WAIT':
-            print(cmd)
             self._execute_wait(client, cmd)
         # else:
         #     client.send(b"$-1\r\n")
@@ -278,6 +287,10 @@ class Server:
                 self._broadcast(data)
 
             self._execute_cmd(client, c)
+
+        # If there is a GETACK, return bytes read before GETACK. Then add the rest
+        if self._parsed_bytes != -1 and ack_pos >= 0:
+            self._parsed_bytes += len(data[ack_end+1:])
 
     def serve_client(self, client):
         data = client.recv(1024)
