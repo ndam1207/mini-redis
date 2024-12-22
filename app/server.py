@@ -8,15 +8,15 @@ class Server:
     COMMANDS = ['PING', 'ECHO', 'SET', 'GET', 'REPLCONF', 'PSYNC', 'KEYS', 'INFO', 'CONFIG']
 
     def __init__(self, **kwargs):
-        self.master= True
+        self.master = True
+        self.socket = None
         self.master_socket = None
+
         self._master_port = -1
         self._master_hostname = None
-        self.socket = None
         self._cache = {}
         self._port = Server.DEFAULT_PORT
         self._rdb_snapshot = None
-
         self._connections = []
         self._parse_args(**kwargs)
 
@@ -68,8 +68,11 @@ class Server:
             self._connections.append(self.master_socket)
 
         # Get RDB file
-        # while True:
-        #     self.serve_client(self.master_socket)
+        resp = self.master_socket.recv(1024)
+        if resp.find(b"REPLCONF"):
+            self.master_socket.send("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n".encode())
+        else:
+            self._parse_data(resp)
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
@@ -85,10 +88,13 @@ class Server:
     def _execute_ping(self, client):
         client.send(b"+PONG\r\n")
 
-    def _execute_replconf(self, client):
-        client.send(b"+OK\r\n")
+    def _execute_replconf(self, client, cmd):
+        if cmd[1].lower() == "capa" or cmd[1].lower() == "listening-port":
+            client.send(b"+OK\r\n")
+        elif cmd[1].upper() == "GETACK":
+            client.send("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n".encode())
 
-    def _execute_psync(self, client, cmd):
+    def _execute_psync(self, client):
         repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
         client.send(f"+FULLRESYNC {repl_id} 0\r\n".encode())
         rdb_file = bytes.fromhex(Server.EMPTY_RDB_FILE)
@@ -198,14 +204,14 @@ class Server:
             resp = f"${resp_len}\r\n{role}\r\n{master_repl_offset}\r\n{master_replid}\r\n"
             client.send(resp.encode())
 
-    def execute_cmd(self, client, cmd):
-        print(f"[execute_cmd] cmd={cmd}\n")
+    def _execute_cmd(self, client, cmd):
+        print(f"[_execute_cmd] cmd={cmd}\n")
         if cmd[0] == 'PING':
             self._execute_ping(client)
         elif cmd[0] == 'REPLCONF':
-            self._execute_replconf(client)
+            self._execute_replconf(client, cmd)
         elif cmd[0] == 'PSYNC':
-            self._execute_psync(client, cmd)
+            self._execute_psync(client)
         if cmd[0] == 'ECHO':
             self._execute_echo(client, cmd)
         elif cmd[0] == 'SET':
@@ -252,7 +258,7 @@ class Server:
         for c in self._split_cmd(parsed):
             if self.master and c[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
-            self.execute_cmd(client, c)
+            self._execute_cmd(client, c)
 
     def serve_client(self, client):
         data = client.recv(1024)

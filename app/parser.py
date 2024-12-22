@@ -14,7 +14,8 @@ class Parser:
     def _parse_bulk_string(self, s_len):
         header = _readbytes_exact(self._buffer, 9)
         if header == RDB.HEADER_MAGIC:
-            print(header)
+            # Skip file parsing for now
+            self._buffer = self._buffer[s_len:]
             return
         bulk_str = _readline(self._buffer).decode()
         print(f"[_parse_bulk_string] buffer={self._buffer} cmd={bulk_str}\n")
