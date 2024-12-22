@@ -63,12 +63,11 @@ class Server:
         self.master_socket.send(f"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n".encode())
         resp = self.master_socket.recv(1024)
         print(resp)
+        self._parse_data(self.master_socket, resp)
 
         if self.master_socket not in self._connections:
             self._connections.append(self.master_socket)
-
-        # Get RDB file
-        resp = self.master_socket.recv(1024)
+        return
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
