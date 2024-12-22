@@ -69,10 +69,6 @@ class Server:
 
         # Get RDB file
         resp = self.master_socket.recv(1024)
-        if resp.find(b"REPLCONF"):
-            self.master_socket.send("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n".encode())
-        else:
-            self._parse_data(resp)
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
