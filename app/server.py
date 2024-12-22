@@ -5,7 +5,7 @@ class Server:
     DEFAULT_PORT = 6379
     EMPTY_RDB_FILE = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
     PROPAGATE_LIST = ['SET', 'DEL']
-    COMMANDS = ['PING', 'ECHO', 'SET', 'GET', 'REPLCONF', 'PSYNC', 'KEYS', 'INFO', 'CONFIG']
+    COMMANDS = ['PING', 'ECHO', 'SET', 'GET', 'REPLCONF', 'PSYNC', 'KEYS', 'INFO', 'CONFIG', 'WAIT']
 
     def __init__(self, **kwargs):
         self.master = True
@@ -207,6 +207,9 @@ class Server:
             resp = f"${resp_len}\r\n{role}\r\n{master_repl_offset}\r\n{master_replid}\r\n"
             client.send(resp.encode())
 
+    def _execute_wait(self, client, cmd):
+        client.send(":0\r\n".encode())
+
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
         if cmd[0] == 'PING':
@@ -227,6 +230,9 @@ class Server:
             self._execute_keys(client, cmd)
         elif cmd[0] == 'INFO':
             self._execute_info(client, cmd)
+        elif cmd[0] == 'WAIT':
+            print(cmd)
+            self._execute_wait(client, cmd)
         # else:
         #     client.send(b"$-1\r\n")
 
@@ -261,8 +267,8 @@ class Server:
         ack_pos = data.find(b"GETACK")
         ack_end = ack_pos + data[ack_pos:].find(b"*\r\n") + utils.LEN_CRLF
         if self._parsed_bytes != -1:
-            if ack_pos:
-                print(f"ackpos = {ack_pos} stream = {data[ack_pos:]}")
+            if ack_pos >= 0:
+                print(f"ack_pos = {ack_pos} original = {data} stream = {data[ack_pos:]}")
                 self._parsed_bytes += len(data[:ack_end+1])
             else:
                 self._parsed_bytes += len(data)
@@ -270,6 +276,7 @@ class Server:
         for c in self._split_cmd(parsed):
             if self.master and c[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
+
             self._execute_cmd(client, c)
 
     def serve_client(self, client):
