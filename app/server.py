@@ -235,25 +235,26 @@ class Server:
         # else:
         print("Dit con me may?")
         self._num_last_acks = 0
-        with concurrent.futures.ThreadPoolExecutor() as exc:
+        with self.replica_lock:
             for c in self._connections.keys():
-                f = exc.submit(self._get_ack, c)
+                self._send_get_ack(c)
         start_time, current_time = time.time(), time.time()
         num_acks = 0
-        while current_time - start_time < timeout or num_acks < num_waits:
-            with self.replica_lock:
-                for c in self._connections:
-                    if self._connections[c] >= self._bytes_offset:
-                        print(c, self._connections[c])
-                        num_acks += 1
-            time.sleep(0.001)
-            print(f"Slept for 0.001s, num_acks = {num_acks} bytes_offset = {self._bytes_offset}")
-            current_time = time.time()
+        # while current_time - start_time < timeout or num_acks < num_waits:
+        #     with self.replica_lock:
+        #         for c in self._connections:
+        #             if self._connections[c] != -1 and self._connections[c] >= self._bytes_offset:
+        #                 print(c, self._connections[c])
+        #                 num_acks += 1
+        #     time.sleep(0.001)
+        #     # print(f"Slept for 0.001s, num_acks = {num_acks} bytes_offset = {self._bytes_offset}")
+        #     current_time = time.time()
 
-        with self.replica_lock:
-            for c in self._connections:
-                if self._connections[c] >= self._bytes_offset:
-                    num_acks += 1
+        # with self.replica_lock:
+        for c in self._connections:
+            print(c, self._connections[c])
+            if self._connections[c] != -1 and self._connections[c] >= self._bytes_offset:
+                num_acks += 1
         client.send(f":{num_acks}\r\n".encode())
 
 
@@ -280,14 +281,15 @@ class Server:
         elif cmd[0] == 'WAIT':
             self._execute_wait(client, cmd)
 
-    def _get_ack(self, client, timeout=0):
+    def _send_get_ack(self, client, timeout=0):
         print("getting ack for", client)
         client.send("*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n".encode())
 
     def _broadcast(self, data):
         print("[Broadcasting]", data)
-        for c in self._connections:
-            c.send(data)
+        with self.replica_lock:
+            for c in self._connections:
+                c.send(data)
 
     def _parse_data(self, client, data):
         p = parser.Parser(data)
