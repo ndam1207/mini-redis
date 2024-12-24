@@ -1,11 +1,13 @@
+import socket, os, time
+import concurrent.futures
+import threading, asyncio
 from app import parser, utils, io
-from threading import Timer
-import socket, os
+from collections import deque
+
 class Server:
     DEFAULT_PORT = 6379
     EMPTY_RDB_FILE = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
     PROPAGATE_LIST = ['SET', 'DEL']
-    COMMANDS = ['PING', 'ECHO', 'SET', 'GET', 'REPLCONF', 'PSYNC', 'KEYS', 'INFO', 'CONFIG', 'WAIT']
 
     def __init__(self, **kwargs):
         self.master = True
@@ -17,9 +19,13 @@ class Server:
         self._cache = {}
         self._port = Server.DEFAULT_PORT
         self._rdb_snapshot = None
-        self._connections = []
-        self._parsed_bytes = -1
+        self.replica_lock = threading.Lock()
+        # Client + bytes offset (if client is a replica)
+        self._connections = {}
+        self._bytes_offset = -1
         self._handshake_done = False
+        self._num_last_acks = 0
+        self._pending_writes = deque()
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -69,7 +75,7 @@ class Server:
         self._parse_data(self.master_socket, resp)
 
         if self.master_socket not in self._connections:
-            self._connections.append(self.master_socket)
+            self._connections[self.master_socket] = -1
         return
 
     def _get_db_image(self):
@@ -90,15 +96,21 @@ class Server:
             client.send(b"+PONG\r\n")
 
     def _execute_replconf(self, client, cmd):
+        print(cmd)
         if cmd[1].lower() == "capa" or cmd[1].lower() == "listening-port":
             client.send(b"+OK\r\n")
         elif cmd[1].upper() == "GETACK":
-            if self._parsed_bytes == -1:
-                self._parsed_bytes = 0
+            if self._bytes_offset == -1:
+                self._bytes_offset = 0
             client.send(
-                f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(self._parsed_bytes))}\r\n{str(self._parsed_bytes)}\r\n" \
+                f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(self._bytes_offset))}\r\n{str(self._bytes_offset)}\r\n" \
                 .encode()
                 )
+        elif cmd[1].upper() == "ACK":
+            bytes_offset = int(cmd[2])
+            print(self._bytes_offset)
+            with self.replica_lock:
+                self._connections[client] = bytes_offset
 
     def _execute_psync(self, client):
         repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
@@ -108,7 +120,7 @@ class Server:
         self._handshake_done = True
         # Avoid duplicated handshake
         if client not in self._connections:
-            self._connections.append(client)
+            self._connections[client] = -1
 
     def _execute_echo(self, client, cmd):
         if len(cmd) != 2:
@@ -134,7 +146,7 @@ class Server:
                     client.send(b"$-1\r\n")
                     return
                 elif expiry > 0:
-                    t = Timer(expiry, self._delete_key, k)
+                    t = threading.Timer(expiry, self._delete_key, k)
                     t.start()
                     print(f"[_execute_get] expiry = {expiry}\n")
                 self._cache[k] = v
@@ -162,7 +174,7 @@ class Server:
          # With expiry
         if len(cmd) == 5:
             expiry = int(cmd[4])
-            t = Timer(utils._ms_to_s(expiry), self._delete_key, key)
+            t = threading.Timer(utils._ms_to_s(expiry), self._delete_key, key)
             t.start()
             print(f"[_execute_set] expiry = {expiry}\n")
         print(self._cache.items())
@@ -215,9 +227,34 @@ class Server:
         if num_waits == 0:
             client.send(":0\r\n".encode())
             return
-        print(self._connections)
-        wait_time = utils._ms_to_s(int(cmd[2]))
-        client.send(f":{len(self._connections)}\r\n".encode())
+        timeout = utils._ms_to_s(int(cmd[2]))
+        # if timeout > 0:
+        #     time.sleep(timeout)
+        # if len(self._pending_writes) == 0:
+        #     client.send(f":{len(self._connections)}\r\n".encode())
+        # else:
+        print("Dit con me may?")
+        self._num_last_acks = 0
+        with concurrent.futures.ThreadPoolExecutor() as exc:
+            for c in self._connections.keys():
+                f = exc.submit(self._get_ack, c)
+        start_time, current_time = time.time(), time.time()
+        num_acks = 0
+        while current_time - start_time < timeout or num_acks < num_waits:
+            with self.replica_lock:
+                for c in self._connections:
+                    if self._connections[c] >= self._bytes_offset:
+                        print(c, self._connections[c])
+                        num_acks += 1
+            time.sleep(0.001)
+            print(f"Slept for 0.001s, num_acks = {num_acks} bytes_offset = {self._bytes_offset}")
+            current_time = time.time()
+
+        with self.replica_lock:
+            for c in self._connections:
+                if self._connections[c] >= self._bytes_offset:
+                    num_acks += 1
+        client.send(f":{num_acks}\r\n".encode())
 
 
     def _execute_cmd(self, client, cmd):
@@ -242,32 +279,15 @@ class Server:
             self._execute_info(client, cmd)
         elif cmd[0] == 'WAIT':
             self._execute_wait(client, cmd)
-        # else:
-        #     client.send(b"$-1\r\n")
+
+    def _get_ack(self, client, timeout=0):
+        print("getting ack for", client)
+        client.send("*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n".encode())
 
     def _broadcast(self, data):
         print("[Broadcasting]", data)
         for c in self._connections:
             c.send(data)
-
-    def _split_cmd(self, parsed):
-        cmds = []
-        cmd = None
-        args = []
-        for item in parsed:
-            if item in Server.COMMANDS:
-                if cmd == 'CONFIG':
-                    args.append(item)
-                    continue
-                elif cmd:
-                    cmds.append([cmd] + args)
-                cmd = item
-                args = []
-            else:
-                args.append(item)
-        if cmd:
-            cmds.append([cmd] + args)
-        return cmds
 
     def _parse_data(self, client, data):
         p = parser.Parser(data)
@@ -275,26 +295,25 @@ class Server:
 
         ack_pos = data.find(b"GETACK")
         ack_end = ack_pos + data[ack_pos:].find(b"*\r\n") + utils.LEN_CRLF
-        if self._parsed_bytes != -1:
+        if self._bytes_offset != -1:
             if ack_pos >= 0:
                 print(f"ack_pos = {ack_pos} original = {data} stream = {data[ack_pos:]}")
-                self._parsed_bytes += len(data[:ack_end+1])
+                self._bytes_offset += len(data[:ack_end+1])
             else:
-                self._parsed_bytes += len(data)
+                self._bytes_offset += len(data)
 
-        for c in self._split_cmd(parsed):
+        for c in utils._split_cmd(parsed):
+            self._execute_cmd(client, c)
             if self.master and c[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
 
-            self._execute_cmd(client, c)
-
         # If there is a GETACK, return bytes read before GETACK. Then add the rest
-        if self._parsed_bytes != -1 and ack_pos >= 0:
-            self._parsed_bytes += len(data[ack_end+1:])
+        if self._bytes_offset != -1 and ack_pos >= 0:
+            self._bytes_offset += len(data[ack_end+1:])
 
     def serve_client(self, client):
         data = client.recv(1024)
         if data:
-            print(data, len(data))
+            print(f"[serve_client] {data}")
             self._parse_data(client, data)
 

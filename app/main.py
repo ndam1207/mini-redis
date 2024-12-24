@@ -1,5 +1,5 @@
-from app import server
 import select, argparse, socket
+from app import server
 
 def main(args):
     redis_server = server.Server(**vars(args))
