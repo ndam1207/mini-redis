@@ -74,7 +74,7 @@ class RDB:
             curr_pos += 1
             expiry = utils.readbytes_exact(key_section, RDB.EXPIRY_TIME_MS_SIZE, curr_pos)
             expiry = int.from_bytes(expiry, byteorder='little')
-            expiry = utils._ms_to_s(expiry) - time.time()
+            expiry = utils.ms_to_s(expiry) - time.time()
 
             curr_pos = curr_pos + RDB.EXPIRY_TIME_MS_SIZE
         elif key_type == RDB.EXPIRY_S:
