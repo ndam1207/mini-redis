@@ -149,7 +149,6 @@ class Server:
                 self._cache[k] = v
 
         print(f"[_execute_get] cmd = {cmd} key={cmd[1]}\n")
-        print(self._cache.items())
         if not v:
             client.send(b"$-1\r\n")
             return
@@ -171,7 +170,7 @@ class Server:
          # With expiry
         if len(cmd) == 5:
             expiry = int(cmd[4])
-            t = threading.Timer(utils._ms_to_s(expiry), self._delete_key, args=(key,))
+            t = threading.Timer(utils.ms_to_s(expiry), self._delete_key, args=(key,))
             t.start()
             print(f"[_execute_set] expiry = {expiry}\n")
         print(self._cache.items())
@@ -224,7 +223,7 @@ class Server:
         if num_waits == 0:
             client.send(":0\r\n".encode())
             return
-        timeout = utils._ms_to_s(int(cmd[2]))
+        timeout = utils.ms_to_s(int(cmd[2]))
         # if len(self._pending_writes) == 0:
         #     client.send(f":{len(self._connections)}\r\n".encode())
         # else:
@@ -242,6 +241,21 @@ class Server:
         else:
             t = threading.Timer(timeout, self._count_acks_from_wait, args=(client,))
             t.start()
+
+    def _execute_type(self, client, cmd):
+        v = ""
+        key = cmd[1]
+        if key in self._cache:
+            v = self._cache[key]
+        else:
+            if self._rdb_snapshot:
+                k, v, expiry = self._rdb_snapshot.get_val(key)
+                self._cache[k] = v
+        if not v:
+            client.send("+none\r\n".encode())
+        else:
+            val_type = utils.get_type(v)
+            client.send(f"+{val_type}\r\n".encode())
 
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
@@ -265,6 +279,8 @@ class Server:
             self._execute_info(client, cmd)
         elif cmd[0] == 'WAIT':
             self._execute_wait(client, cmd)
+        elif cmd[0] == 'TYPE':
+            self._execute_type(client, cmd)
 
     def _count_acks_from_wait(self, client):
         num_acks = 0
@@ -294,17 +310,14 @@ class Server:
             if ack_pos >= 0:
                 print(f"ack_pos = {ack_pos} original = {data} stream = {data[ack_pos:]}")
                 self._bytes_offset += len(data[:ack_end+1])
-            # else:
-            #     self._bytes_offset += len(data)
-
-        for c in utils._split_cmd(parsed):
+        # print(parsed)
+        for c in utils.split_cmd(parsed):
             self._execute_cmd(client, c)
             if self.master and c[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
                 if self._bytes_offset == -1:
                     self._bytes_offset = len(data)
-
-                elif self._bytes_offset != -1:
+                else:
                     self._bytes_offset += len(data)
 
         # If there is a GETACK, return bytes read before GETACK. Then add the rest

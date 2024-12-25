@@ -65,41 +65,41 @@ class RDB:
 
     def _get_key_val(self, key_section):
         start_pos, curr_pos = 0, 0
-        key_type = utils._readbytes_exact(key_section, 1,start_pos)
+        key_type = utils.readbytes_exact(key_section, 1,start_pos)
         key, value, expiry = None, None, 0
         bytes_read = 0
 
         # Parse expiry
         if key_type == RDB.EXPIRY_MS:
             curr_pos += 1
-            expiry = utils._readbytes_exact(key_section, RDB.EXPIRY_TIME_MS_SIZE, curr_pos)
+            expiry = utils.readbytes_exact(key_section, RDB.EXPIRY_TIME_MS_SIZE, curr_pos)
             expiry = int.from_bytes(expiry, byteorder='little')
             expiry = utils._ms_to_s(expiry) - time.time()
 
             curr_pos = curr_pos + RDB.EXPIRY_TIME_MS_SIZE
         elif key_type == RDB.EXPIRY_S:
             curr_pos += 1
-            expiry = utils._readbytes_exact(key_section, RDB.EXPIRY_TIME_S_SIZE, curr_pos)
+            expiry = utils.readbytes_exact(key_section, RDB.EXPIRY_TIME_S_SIZE, curr_pos)
             expiry = int.from_bytes(expiry, byteorder='little') - time.time()
             curr_pos = curr_pos + RDB.EXPIRY_TIME_S_SIZE
 
-        key_type = utils._readbytes_exact(key_section, 1, curr_pos)
+        key_type = utils.readbytes_exact(key_section, 1, curr_pos)
 
         # Parse key type
         if key_type == RDB.STRING_TYPE:
             curr_pos += 1
             # Key (size encoding + key)
-            byte = utils._readbytes_exact(key_section, 1, curr_pos)
+            byte = utils.readbytes_exact(key_section, 1, curr_pos)
             curr_pos += 1
             key_size = self._parse_string_encode(byte)
-            key = utils._readbytes_exact(key_section, key_size, curr_pos).decode()
+            key = utils.readbytes_exact(key_section, key_size, curr_pos).decode()
             curr_pos = curr_pos + key_size
 
             # Value (size encoding + value)
-            byte = utils._readbytes_exact(key_section, 1, curr_pos)
+            byte = utils.readbytes_exact(key_section, 1, curr_pos)
             curr_pos += 1
             value_size = self._parse_string_encode(byte)
-            value = utils._readbytes_exact(key_section, value_size, curr_pos).decode()
+            value = utils.readbytes_exact(key_section, value_size, curr_pos).decode()
             curr_pos = curr_pos + value_size
 
         bytes_read = curr_pos - start_pos
@@ -108,7 +108,7 @@ class RDB:
 
     def _get_key_section_start(self):
         tab_section = self._get_db_tab(self._buffer)
-        num_keys = utils._readbytes_exact(tab_section, 1)
+        num_keys = utils.readbytes_exact(tab_section, 1)
         key_section = tab_section[2:]
         return key_section, int.from_bytes(num_keys)
 
