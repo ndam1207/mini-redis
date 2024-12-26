@@ -19,6 +19,9 @@ def readline(stream):
 def ms_to_s(ms):
     return 0.001*int(ms)
 
+def s_to_ms(s):
+    return 1000.0*int(s)
+
 def get_type(var):
     var_type = type(var).__name__
     if var_type == 'str':

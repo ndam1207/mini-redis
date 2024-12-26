@@ -166,7 +166,7 @@ class Stream:
         self._seq_num_last = -1
 
     def generate_time_and_seq(self):
-        new_time = time.time()
+        new_time = utils.s_to_ms(time.time())
         new_seq = self.generate_seq(new_time)
         return new_time, new_seq
 
