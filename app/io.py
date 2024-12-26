@@ -181,9 +181,9 @@ class Stream:
 
     def id_valid(self, id):
         ms, seq = id.split("-")[0], id.split("-")[1]
-        if int(ms) > self._ms_last:
+        if float(ms) > self._ms_last:
             return True
-        elif int(ms) == self._ms_last:
+        elif float(ms) == self._ms_last:
             if int(seq) > self._seq_num_last:
                 return True
         return False
@@ -191,7 +191,7 @@ class Stream:
     def add_entry(self, id, key, val):
         print("[add_entry]", id)
         ms, seq = id.split("-")[0], id.split("-")[1]
-        self._ms_last, self._seq_num_last = int(ms), int(seq)
+        self._ms_last, self._seq_num_last = float(ms), int(seq)
         self._entries.append(StreamEntry(id, key, val))
 
     def find_entry(self, id):
