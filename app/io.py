@@ -167,10 +167,10 @@ class Stream:
 
     def id_valid(self, id):
         ms, seq = id.split("-")
-        if ms > self._ms_last:
+        if int(ms) > self._ms_last:
             return True
-        elif ms == self._ms_last:
-            if seq > self._seq_num_last:
+        elif int(ms) == self._ms_last:
+            if int(seq) > self._seq_num_last:
                 return True
         return False
 
