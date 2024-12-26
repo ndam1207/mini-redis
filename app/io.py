@@ -165,11 +165,11 @@ class Stream:
         self._ms_last = -1
         self._seq_num_last = -1
 
-    def generate_seq(self):
-        new_seq = self._seq_num_last + 1
-        if self._ms_last <= 0 and new_seq == 0:
-            new_seq = 1
-        self._seq_num_last = new_seq
+    def generate_seq(self, time=-1):
+        if time > self._seq_num_last:
+            new_seq = self._seq_num_last
+        else:
+            new_seq = self._seq_num_last + 1
         return new_seq
 
     def id_valid(self, id):
