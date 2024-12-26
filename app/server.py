@@ -9,6 +9,7 @@ class Server:
     DEFAULT_PORT = 6379
     EMPTY_RDB_FILE = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
     PROPAGATE_LIST = ['SET', 'DEL']
+    SKIP_LIST = ['REDIS0011']
 
     def __init__(self, **kwargs):
         self.master = True
@@ -337,7 +338,7 @@ class Server:
 
         for c in (p.commands):
             cmd, cmd_size = c.buffer, c.size
-            if not cmd or cmd[0] == "REDIS0011":
+            if not cmd:
                 continue
             self._execute_cmd(client, cmd)
             if self.master and cmd[0] in Server.PROPAGATE_LIST:
@@ -346,12 +347,12 @@ class Server:
                     self._replica_offset = cmd_size
                 else:
                     self._replica_offset += cmd_size
-
-            if self._bytes_offset == -1:
-                self._bytes_offset = cmd_size
-            else:
-                self._bytes_offset += cmd_size
-            print(cmd, cmd_size, self._bytes_offset)
+            if cmd[0] not in SKIP_LIST:
+                if self._bytes_offset == -1:
+                    self._bytes_offset = cmd_size
+                else:
+                    self._bytes_offset += cmd_size
+                print(cmd, cmd_size, self._bytes_offset)
 
     def serve_client(self, client):
         data = client.recv(1024)
