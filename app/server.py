@@ -2,6 +2,7 @@ import socket, os, time
 import concurrent.futures
 import threading, asyncio
 from app import parser, utils, io
+from app.parser import Parser, Command
 from collections import defaultdict
 
 class Server:
@@ -333,21 +334,24 @@ class Server:
         #     if ack_pos >= 0:
         #         print(f"ack_pos = {ack_pos} original = {data} stream = {data[ack_pos:]}")
         #         self._bytes_offset += len(data[:ack_end+1])
-
-        for c in utils.split_cmd(p.commands):
-            self._execute_cmd(client, c)
-            if self.master and c[0] in Server.PROPAGATE_LIST:
+        for c in (p.commands):
+            cmd, cmd_size = c.buffer, c.size
+            if not cmd:
+                continue
+            print(cmd, cmd_size)
+            self._execute_cmd(client, cmd)
+            if self.master and cmd[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
                 if self._replica_offset == -1:
-                    self._replica_offset = len(data)
+                    self._replica_offset = cmd_size
                 else:
-                    self._replica_offset += len(data)
+                    self._replica_offset += cmd_size
 
-        if self._handshake_done and handshake_pos == -1:
-            if self._bytes_offset == -1:
-                self._bytes_offset = len(data)
-            else:
-                self._bytes_offset += len(data)
+            if self._handshake_done and handshake_pos == -1:
+                if self._bytes_offset == -1:
+                    self._bytes_offset = cmd_size
+                else:
+                    self._bytes_offset += cmd_size
 
         # If there is a GETACK, return bytes read before GETACK. Then add the rest
         # if self._bytes_offset != -1 and ack_pos >= 0:

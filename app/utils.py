@@ -18,25 +18,6 @@ def readline(stream):
 def ms_to_s(ms):
     return 0.001*int(ms)
 
-def split_cmd(parsed):
-    cmds = []
-    cmd = None
-    args = []
-    for item in parsed:
-        if item in COMMANDS:
-            if cmd == 'CONFIG':
-                args.append(item)
-                continue
-            elif cmd:
-                cmds.append([cmd] + args)
-            cmd = item
-            args = []
-        else:
-            args.append(item)
-    if cmd:
-        cmds.append([cmd] + args)
-    return cmds
-
 def get_type(var):
     var_type = type(var).__name__
     if var_type == 'str':
