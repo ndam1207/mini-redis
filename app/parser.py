@@ -62,9 +62,9 @@ class Parser:
 
     def parse_data(self):
         while self._buffer:
-            print(f"[parse_data] BEFORE buffer={self._buffer}")
+            # print(f"[parse_data] BEFORE buffer={self._buffer}")
             self._parse_stream()
-            print(f"[parse_data] AFTER buffer={self._buffer} bytes_read={self.bytes_read}")
+            # print(f"[parse_data] AFTER buffer={self._buffer} bytes_read={self.bytes_read}")
             self.commands.append(Command(cmd_buffer=self._parsed, cmd_size=self.bytes_read))
             self._parsed = []
             self.bytes_read = 0

@@ -330,15 +330,10 @@ class Server:
         handshake_pos = data.find(b"REDIS0011")
         print(f"[_parse_data] handshake={self._handshake_done} handshake_pos={handshake_pos} {data} {len(data)}")
 
-        # if self._bytes_offset != -1:
-        #     if ack_pos >= 0:
-        #         print(f"ack_pos = {ack_pos} original = {data} stream = {data[ack_pos:]}")
-        #         self._bytes_offset += len(data[:ack_end+1])
         for c in (p.commands):
             cmd, cmd_size = c.buffer, c.size
             if not cmd:
                 continue
-            print(cmd, cmd_size)
             self._execute_cmd(client, cmd)
             if self.master and cmd[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
@@ -352,10 +347,7 @@ class Server:
                     self._bytes_offset = cmd_size
                 else:
                     self._bytes_offset += cmd_size
-
-        # If there is a GETACK, return bytes read before GETACK. Then add the rest
-        # if self._bytes_offset != -1 and ack_pos >= 0:
-        #     self._bytes_offset += len(data[ack_end+1:])
+                print(cmd, cmd_size, self._bytes_offset)
 
     def serve_client(self, client):
         data = client.recv(1024)
