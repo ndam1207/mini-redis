@@ -183,6 +183,7 @@ class Stream:
 
     def add_entry(self, id, key, val):
         ms, seq = id.split("-")[0], id.split("-")[1]
+        print(ms, seq)
         self._ms_last, self._seq_num_last = int(ms), int(seq)
         self._entries.append(StreamEntry(id, key, val))
 
