@@ -182,6 +182,7 @@ class Stream:
         return False
 
     def add_entry(self, id, key, val):
+        print(tuple(id.split("-")))
         ms, seq = tuple(id.split("-"))
         self._ms_last, self._seq_num_last = int(ms), int(seq)
         self._entries.append(StreamEntry(id, key, val))
