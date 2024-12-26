@@ -203,6 +203,8 @@ class Stream:
         print("[find_range]", start_time, start_seq, end_time, end_seq)
         for e in self.entries:
             e_time, e_seq = int(e.id.split("-")[0]), int(e.id.split("-")[1])
+            if end_id == "-":
+                end_time, end_seq = e_time, e_seq
             if start_time < e_time < end_time:
                 stream_list.append(e)
             elif start_time == e_time and start_seq <= e_seq <= end_seq:
