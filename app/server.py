@@ -337,7 +337,7 @@ class Server:
 
         for c in (p.commands):
             cmd, cmd_size = c.buffer, c.size
-            if not cmd:
+            if not cmd or cmd[0] == "REDIS0011":
                 continue
             self._execute_cmd(client, cmd)
             if self.master and cmd[0] in Server.PROPAGATE_LIST:
