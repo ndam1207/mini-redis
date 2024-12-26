@@ -166,10 +166,9 @@ class Stream:
         self._seq_num_last = -1
 
     def generate_seq(self):
-        if self._seq_num_last == -1:
-            new_seq = 0
-        else:
-            new_seq = self._seq_num_last + 1
+        new_seq = self._seq_num_last + 1
+        if self._ms_last == -1 and new_seq == 0:
+            new_seq = 1
         self._seq_num_last = new_seq
         return new_seq
 
