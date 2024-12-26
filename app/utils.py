@@ -1,6 +1,6 @@
 LEN_CRLF = 2
 COMMANDS = ['PING', 'ECHO', 'SET', 'GET', 'REPLCONF', 'PSYNC', 'KEYS', \
-            'INFO', 'CONFIG', 'WAIT', 'TYPE', 'XADD', 'REDIS0011']
+            'INFO', 'CONFIG', 'WAIT', 'TYPE', 'XADD', 'REDIS0011', 'XRANGE']
 
 def readbytes_exact(stream, length, start=0):
     return stream[start:start+length]
@@ -28,3 +28,9 @@ def get_type(var):
         return 'string'
     elif var_type == 'int':
         return 'int'
+
+def encode_array(array, array_len=-1):
+    if array_len == -1:
+        array_len = len(array)
+    for item in array:
+        pass

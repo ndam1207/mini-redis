@@ -261,6 +261,7 @@ class Server:
             client.send(f"+{val_type}\r\n".encode())
 
     def _execute_xadd(self, client, cmd):
+        print("execute xadd")
         stream_key = str(cmd[1])
         if stream_key not in self._streams:
             self._streams[stream_key] = io.Stream(stream_key)
@@ -281,13 +282,38 @@ class Server:
         if not stream.id_valid(entry_id):
             client.send("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".encode())
             return
-        key, val = str(cmd[3]), str(cmd[4])
-        stream.add_entry(entry_id, key, val)
+        idx = 3
+        kv_list = []
+        while idx < len(cmd):
+            key, val = str(cmd[idx]), str(cmd[idx+1])
+            kv_list.append((key, val))
+            idx += 2
+        stream.add_entry(entry_id, kv_list)
         client.send(f"${len(entry_id)}\r\n{entry_id}\r\n".encode())
 
+    def _execute_xrange(self, client, cmd):
+        stream_key = str(cmd[1])
+        start_id = str(cmd[2])
+        end_id = str(cmd[3])
+        stream = self._streams[stream_key]
+        print(f"[_execute_xrange]", start_id, end_id)
+        stream_list = stream.find_range(start_id, end_id)
+
+        resp = f"*{len(stream_list)}\r\n"
+        for s in stream_list:
+            print(s.id, s.kv_list)
+            resp += "*2\r\n"
+            id, kv_list = s.id, s.kv_list
+            resp += f"${len(str(id))}\r\n{str(id)}\r\n"
+            resp += f"*{len(kv_list)*2}\r\n"
+            for key, val in kv_list:
+                resp += f"${len(str(key))}\r\n{str(key)}\r\n"
+                resp += f"${len(str(val))}\r\n{str(val)}\r\n"
+        client.send(resp.encode())
 
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
+        cmd[0] = cmd[0].upper()
         if cmd[0] == 'PING':
             self._execute_ping(client)
         elif cmd[0] == 'REPLCONF':
@@ -314,6 +340,9 @@ class Server:
             self._execute_type(client, cmd)
         elif cmd[0] == 'XADD':
             self._execute_xadd(client, cmd)
+        elif cmd[0] == 'XRANGE':
+            self._execute_xrange(client, cmd)
+
 
     def _count_acks_from_wait(self, client):
         num_acks = 0
@@ -336,10 +365,7 @@ class Server:
     def _parse_data(self, client, data):
         p = parser.Parser(data)
         p.parse_data()
-
-        handshake_pos = data.find(b"REDIS0011")
-        print(f"[_parse_data] handshake={self._handshake_done} handshake_pos={handshake_pos} {data} {len(data)}")
-
+        # print(f"[_parse_data] handshake={self._handshake_done} {data} {len(data)}")
         for c in (p.commands):
             cmd, cmd_size = c.buffer, c.size
             if not cmd:
@@ -356,7 +382,7 @@ class Server:
                     self._bytes_offset = cmd_size
                 else:
                     self._bytes_offset += cmd_size
-                print(cmd, cmd_size, self._bytes_offset)
+                # print(cmd, cmd_size, self._bytes_offset)
 
     def serve_client(self, client):
         data = client.recv(1024)

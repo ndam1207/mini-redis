@@ -154,14 +154,13 @@ class RDB:
         return data
 
 class StreamEntry:
-    def __init__(self, id, key, val):
+    def __init__(self, id, kv_list):
         self.id = id
-        self.key = key
-        self.val = val
+        self.kv_list = kv_list
 class Stream:
     def __init__(self, stream_key):
         self.stream_key = stream_key
-        self._entries = deque()
+        self.entries = deque()
         self._ms_last = -1
         self._seq_num_last = -1
 
@@ -181,22 +180,34 @@ class Stream:
 
     def id_valid(self, id):
         ms, seq = id.split("-")[0], id.split("-")[1]
-        if float(ms) > self._ms_last:
+        if int(ms) > self._ms_last:
             return True
-        elif float(ms) == self._ms_last:
+        elif int(ms) == self._ms_last:
             if int(seq) > self._seq_num_last:
                 return True
         return False
 
-    def add_entry(self, id, key, val):
+    def add_entry(self, id, kv_list):
         print("[add_entry]", id)
         ms, seq = id.split("-")[0], id.split("-")[1]
-        self._ms_last, self._seq_num_last = float(ms), int(seq)
-        self._entries.append(StreamEntry(id, key, val))
+        self._ms_last, self._seq_num_last = int(ms), int(seq)
+        self.entries.append(StreamEntry(id, kv_list))
 
-    def find_entry(self, id):
-        for e in self._entries:
-            if e.id == id:
-                return e
-        return None
-
+    def find_range(self, start_id, end_id):
+        start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
+        end_time, end_seq = int(end_id.split("-")[0]), int(end_id.split("-")[1])
+        stream_list = []
+        print("[find_range]", start_time, start_seq, end_time, end_seq)
+        for e in self.entries:
+            e_time, e_seq = int(e.id.split("-")[0]), int(e.id.split("-")[1])
+            if start_time < e_time < end_time:
+                stream_list.append(e)
+            elif start_time == e_time and start_seq <= e_seq <= end_seq:
+                # print("start_time == e_time and start_seq <= e_seq")
+                # print(e_time, e_seq)
+                stream_list.append(e)
+            elif end_time == e_time and start_seq <= e_seq <= end_seq:
+                # print("end_time == e_time and e_seq <= end_seq")
+                # print(e_time, e_seq)
+                stream_list.append(e)
+        return stream_list
