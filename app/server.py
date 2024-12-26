@@ -320,7 +320,6 @@ class Server:
         client.send(f":{num_acks}\r\n".encode())
 
     def _send_get_ack(self, client, timeout=0):
-        print("send_get_ack")
         client.send("*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n".encode())
 
     def _broadcast(self, data):
@@ -348,12 +347,11 @@ class Server:
                 else:
                     self._replica_offset += cmd_size
 
-            if self._handshake_done and handshake_pos == -1:
-                if self._bytes_offset == -1:
-                    self._bytes_offset = cmd_size
-                else:
-                    self._bytes_offset += cmd_size
-                print(cmd, cmd_size, self._bytes_offset)
+            if self._bytes_offset == -1:
+                self._bytes_offset = cmd_size
+            else:
+                self._bytes_offset += cmd_size
+            print(cmd, cmd_size, self._bytes_offset)
 
     def serve_client(self, client):
         data = client.recv(1024)
