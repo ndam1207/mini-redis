@@ -275,6 +275,7 @@ class Server:
             if not stream.id_valid(entry_id):
                 client.send("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".encode())
                 return
+            stream.add_entry(entry_id, key, val)
             idx += 2
 
         client.send(f"${len(entry_id)}\r\n{entry_id}\r\n".encode())
