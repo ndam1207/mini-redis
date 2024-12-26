@@ -167,8 +167,6 @@ class Stream:
 
     def id_valid(self, id):
         ms, seq = id.split("-")
-        print(id, ms, seq)
-        print(self._ms_last, self._seq_num_last)
         if int(ms) > self._ms_last:
             return True
         elif int(ms) == self._ms_last:
