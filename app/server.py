@@ -266,8 +266,8 @@ class Server:
             self._streams[stream_key] = io.Stream(stream_key)
         stream = self._streams[stream_key]
         entry_id = str(cmd[2])
-        print(entry_id)
         if entry_id == "0-0":
+            print(entry_id)
             client.send("-ERR The ID specified in XADD must be greater than 0-0\r\n".encode())
             return
         key, val = str(cmd[3]), str(cmd[4])
