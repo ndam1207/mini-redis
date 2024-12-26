@@ -273,7 +273,7 @@ class Server:
         key, val = str(cmd[3]), str(cmd[4])
         ms, seq = entry_id.split("-")
         if seq == '*':
-            seq = stream.generate_seq()
+            seq = stream.generate_seq(int(ms))
             entry_id = f"{ms}-{seq}"
         else:
             if not stream.id_valid(entry_id):
