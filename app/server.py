@@ -274,7 +274,6 @@ class Server:
             ms, seq = stream.generate_time_and_seq()
             entry_id = f"{ms}-{seq}".strip()
         else:
-            key, val = str(cmd[3]), str(cmd[4])
             ms, seq = entry_id.split("-")[0], entry_id.split("-")[1]
             if seq == '*':
                 seq = stream.generate_seq(float(ms))
@@ -282,6 +281,7 @@ class Server:
         if not stream.id_valid(entry_id):
             client.send("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".encode())
             return
+        key, val = str(cmd[3]), str(cmd[4])
         stream.add_entry(entry_id, key, val)
         client.send(f"${len(entry_id)}\r\n{entry_id}\r\n".encode())
 
