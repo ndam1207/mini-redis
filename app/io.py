@@ -1,6 +1,6 @@
 import os, time, collections
 from app import utils
-
+from collections import deque
 class RDB:
     HEADER_MAGIC = b'\x52\x45\x44\x49\x53\x30\x30\x31\x31'
     META_START = b'\xfa'
@@ -161,10 +161,24 @@ class StreamEntry:
 class Stream:
     def __init__(self, stream_key):
         self.stream_key = stream_key
-        self._entries = []
+        self._entries = deque()
+        self._ms_last = 0
+        self._seq_num_last = -1
 
-    def add_entry(self, id, key, val):
-        self._entries.append(StreamEntry(id, key, val))
+    def id_valid(self, id):
+        ms, seq = id.split("-")
+        if ms > self._ms_last:
+            return True
+        elif ms == self._ms_last:
+            if seq > self._seq_num_last:
+                return True
+        return False
+
+    def try_add_entry(self, id, key, val):
+        if self.id_valid(id, key, val):
+            self._entries.append(StreamEntry(id, key, val))
+            return True
+        return False
 
     def find_entry(self, id):
         for e in self._entries:
