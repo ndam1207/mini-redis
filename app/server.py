@@ -271,7 +271,8 @@ class Server:
             client.send("-ERR The ID specified in XADD must be greater than 0-0\r\n".encode())
             return
         key, val = str(cmd[3]), str(cmd[4])
-        ms, seq = entry_id.split("-")
+        print(entry_id.split("-"))
+        # ms, seq = entry_id.split("-")
         if seq == '*':
             seq = stream.generate_seq(int(ms))
             entry_id = f"{ms}-{seq}"
