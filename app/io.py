@@ -173,7 +173,7 @@ class Stream:
         return new_seq
 
     def id_valid(self, id):
-        ms, seq = id.split("-")
+        ms, seq = tuple(id.split("-"))
         if int(ms) > self._ms_last:
             return True
         elif int(ms) == self._ms_last:
