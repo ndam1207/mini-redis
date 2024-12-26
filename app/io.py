@@ -194,7 +194,10 @@ class Stream:
         self.entries.append(StreamEntry(id, kv_list))
 
     def find_range(self, start_id, end_id):
-        start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
+        if start_id == "-":
+            start_time, start_seq = 0, 0
+        else:
+            start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
         end_time, end_seq = int(end_id.split("-")[0]), int(end_id.split("-")[1])
         stream_list = []
         print("[find_range]", start_time, start_seq, end_time, end_seq)
