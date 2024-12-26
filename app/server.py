@@ -272,10 +272,9 @@ class Server:
             return
         key, val = str(cmd[3]), str(cmd[4])
         ms, seq = entry_id.split("-")[0], entry_id.split("-")[1]
-        print(ms, seq)
         if seq == '*':
             seq = stream.generate_seq(int(ms))
-            entry_id = f"{ms}-{seq}"
+            entry_id = f"{ms}-{seq}".strip()
         else:
             if not stream.id_valid(entry_id):
                 client.send("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".encode())
