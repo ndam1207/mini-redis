@@ -2,8 +2,9 @@ from app.utils import readline, readbytes_exact, LEN_CRLF
 from app.io import RDB
 class Parser:
     def __init__(self, buffer=b""):
+        self.commands = []
+        self.bytes_read = 0
         self._buffer = buffer
-        self._commands = []
 
     def _parse_array(self, num_args):
         # print(f"[_parse_array] buffer = {self._buffer}, num_args={num_args}\n")
@@ -14,20 +15,23 @@ class Parser:
         header = readbytes_exact(self._buffer, 9)
         if header == RDB.HEADER_MAGIC:
             # Skip file parsing for now
-            print(f"[_parse_bulk_string] Found RDB buffer={self._buffer} header={header}\n")
+            # print(f"[_parse_bulk_string] Found RDB buffer={self._buffer} header={header}\n")
+            self.commands.append(header.decode())
             self._buffer = self._buffer[s_len:]
             return
         bulk_str = readline(self._buffer).decode()
         # print(f"[_parse_bulk_string] buffer={self._buffer} cmd={bulk_str}\n")
         self._buffer = self._buffer[s_len+LEN_CRLF:]
-        self._commands.append(bulk_str)
+        self.commands.append(bulk_str)
+        self.bytes_read += (s_len+LEN_CRLF)
 
     def _parse_stream(self):
         header = readline(self._buffer)
         self._buffer = self._buffer[len(header)+LEN_CRLF:]
         header = header.decode()
         cmd_type = header[0]
-        print(f"[parse_stream] header = {header.encode()} cmd_type={cmd_type} buffer={self._buffer}\n")
+        self.bytes_read += len(header)+LEN_CRLF
+        # print(f"[parse_stream] header = {header.encode()} cmd_type={cmd_type} buffer={self._buffer}\n")
         if cmd_type == '*':
             num_args = int(header[1:])
             self._parse_array(num_args)
@@ -37,5 +41,6 @@ class Parser:
 
     def parse_data(self):
         while self._buffer:
+            print(f"[parse_data] BEFORE buffer={self._buffer}")
             self._parse_stream()
-        return self._commands
+            print(f"[parse_data] AFTER buffer={self._buffer} bytes_read={self.bytes_read}")

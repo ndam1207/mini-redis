@@ -1,5 +1,5 @@
 LEN_CRLF = 2
-COMMANDS = ['PING', 'ECHO', 'SET', 'GET', 'REPLCONF', 'PSYNC', 'KEYS', 'INFO', 'CONFIG', 'WAIT', 'TYPE']
+COMMANDS = ['PING', 'ECHO', 'SET', 'GET', 'REPLCONF', 'PSYNC', 'KEYS', 'INFO', 'CONFIG', 'WAIT', 'TYPE', 'XADD', 'REDIS0011']
 
 def readbytes_exact(stream, length, start=0):
     return stream[start:start+length]

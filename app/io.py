@@ -1,4 +1,4 @@
-import os, mmap, time
+import os, time, collections
 from app import utils
 
 class RDB:
@@ -152,3 +152,23 @@ class RDB:
             if key:
                 data[key] = value
         return data
+
+class StreamEntry:
+    def __init__(self, id, key, val):
+        self.id = id
+        self.key = key
+        self.val = val
+class Stream:
+    def __init__(self, stream_key):
+        self.stream_key = stream_key
+        self._entries = []
+
+    def add_entry(self, id, key, val):
+        self._entries.append(StreamEntry(id, key, val))
+
+    def find_entry(self, id):
+        for e in self._entries:
+            if e.id == id:
+                return e
+        return None
+

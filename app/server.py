@@ -2,7 +2,7 @@ import socket, os, time
 import concurrent.futures
 import threading, asyncio
 from app import parser, utils, io
-from collections import deque
+from collections import defaultdict
 
 class Server:
     DEFAULT_PORT = 6379
@@ -23,7 +23,9 @@ class Server:
         # Client + bytes offset (if client is a replica)
         self._connections = {}
         self._bytes_offset = -1
+        self._replica_offset = -1
         self._handshake_done = False
+        self._streams = {}
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -67,14 +69,12 @@ class Server:
         print(resp)
         # PSYNC
         self.master_socket.send(f"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n".encode())
-        resp = self.master_socket.recv(1024)
-        self._handshake_done = True
-        print(resp)
-        self._parse_data(self.master_socket, resp)
+        # resp = self.master_socket.recv(1024)
+        # print(resp)
+        # self._parse_data(self.master_socket, resp)
 
         if self.master_socket not in self._connections:
             self._connections[self.master_socket] = -1
-        return
 
     def _get_db_image(self):
         rdb_path = os.path.join(self._cache['dir'], self._cache['dbfilename'])
@@ -97,15 +97,13 @@ class Server:
         if cmd[1].lower() == "capa" or cmd[1].lower() == "listening-port":
             client.send(b"+OK\r\n")
         elif cmd[1].upper() == "GETACK":
-            if self._bytes_offset == -1:
-                self._bytes_offset = 0
+            offset = self._bytes_offset if self._bytes_offset != -1 else 0
             client.send(
-                f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(self._bytes_offset))}\r\n{str(self._bytes_offset)}\r\n" \
+                f"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n${len(str(offset))}\r\n{str(offset)}\r\n" \
                 .encode()
                 )
         elif cmd[1].upper() == "ACK":
             bytes_offset = int(cmd[2])
-            print(self._bytes_offset)
             with self.replica_lock:
                 self._connections[client] = bytes_offset
 
@@ -115,9 +113,11 @@ class Server:
         rdb_file = bytes.fromhex(Server.EMPTY_RDB_FILE)
         client.send(f"${len(rdb_file)}\r\n".encode() + rdb_file)
         self._handshake_done = True
-        # Avoid duplicated handshake
         if client not in self._connections:
             self._connections[client] = 0
+
+    def _finish_handshake(self, master_socket):
+        self._handshake_done = True
 
     def _execute_echo(self, client, cmd):
         if len(cmd) != 2:
@@ -218,24 +218,22 @@ class Server:
             resp = f"${resp_len}\r\n{role}\r\n{master_repl_offset}\r\n{master_replid}\r\n"
             client.send(resp.encode())
 
+    # Master
     def _execute_wait(self, client, cmd):
         num_waits = int(cmd[1])
         if num_waits == 0:
             client.send(":0\r\n".encode())
             return
         timeout = utils.ms_to_s(int(cmd[2]))
-        # if len(self._pending_writes) == 0:
-        #     client.send(f":{len(self._connections)}\r\n".encode())
-        # else:
+        print("[_execute_wait] ", self._replica_offset, self._connections.values())
         with self.replica_lock:
             for c in self._connections.keys():
                 self._send_get_ack(c)
         num_acks = 0
         with self.replica_lock:
             for c in self._connections:
-                if self._connections[c] != -1 and self._connections[c] >= self._bytes_offset:
+                if self._connections[c] >= self._replica_offset:
                     num_acks += 1
-        print(num_acks, num_waits, self._bytes_offset)
         if num_acks >= num_waits:
             client.send(f":{num_acks}\r\n".encode())
         else:
@@ -245,6 +243,9 @@ class Server:
     def _execute_type(self, client, cmd):
         v = ""
         key = cmd[1]
+        if key in self._streams:
+            client.send("+stream\r\n".encode())
+            return
         if key in self._cache:
             v = self._cache[key]
         else:
@@ -257,6 +258,22 @@ class Server:
             val_type = utils.get_type(v)
             client.send(f"+{val_type}\r\n".encode())
 
+    def _execute_xadd(self, client, cmd):
+        stream_key = str(cmd[1])
+        if stream_key not in self._streams:
+            self._streams[stream_key] = io.Stream(stream_key)
+        stream = self._streams[stream_key]
+        entry_id = str(cmd[2])
+        idx = 3
+        while idx < len(cmd):
+            key = str(cmd[idx])
+            val = str(cmd[idx+1])
+            stream.add_entry(entry_id, key, val)
+            idx += 2
+
+        client.send(f"${len(entry_id)}\r\n{entry_id}\r\n".encode())
+
+
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
         if cmd[0] == 'PING':
@@ -265,7 +282,9 @@ class Server:
             self._execute_replconf(client, cmd)
         elif cmd[0] == 'PSYNC':
             self._execute_psync(client)
-        if cmd[0] == 'ECHO':
+        elif cmd[0] == 'REDIS0011':
+            self._finish_handshake(client)
+        elif cmd[0] == 'ECHO':
             self._execute_echo(client, cmd)
         elif cmd[0] == 'SET':
             self._execute_set(client, cmd)
@@ -281,17 +300,20 @@ class Server:
             self._execute_wait(client, cmd)
         elif cmd[0] == 'TYPE':
             self._execute_type(client, cmd)
+        elif cmd[0] == 'XADD':
+            self._execute_xadd(client, cmd)
 
     def _count_acks_from_wait(self, client):
         num_acks = 0
+        print("[_count_acks_from_wait] ", self._replica_offset, self._connections.values())
         with self.replica_lock:
             for c in self._connections:
-                if self._connections[c] != -1 and self._connections[c] >= self._bytes_offset:
+                if self._connections[c] >= self._replica_offset:
                     num_acks += 1
-        print(self._bytes_offset)
         client.send(f":{num_acks}\r\n".encode())
 
     def _send_get_ack(self, client, timeout=0):
+        print("send_get_ack")
         client.send("*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n".encode())
 
     def _broadcast(self, data):
@@ -302,31 +324,37 @@ class Server:
 
     def _parse_data(self, client, data):
         p = parser.Parser(data)
-        parsed = p.parse_data()
+        p.parse_data()
 
-        ack_pos = data.find(b"GETACK")
-        ack_end = ack_pos + data[ack_pos:].find(b"*\r\n") + utils.LEN_CRLF
-        if self._bytes_offset != -1:
-            if ack_pos >= 0:
-                print(f"ack_pos = {ack_pos} original = {data} stream = {data[ack_pos:]}")
-                self._bytes_offset += len(data[:ack_end+1])
-        # print(parsed)
-        for c in utils.split_cmd(parsed):
+        handshake_pos = data.find(b"REDIS0011")
+        print(f"[_parse_data] handshake={self._handshake_done} handshake_pos={handshake_pos} {data} {len(data)}")
+
+        # if self._bytes_offset != -1:
+        #     if ack_pos >= 0:
+        #         print(f"ack_pos = {ack_pos} original = {data} stream = {data[ack_pos:]}")
+        #         self._bytes_offset += len(data[:ack_end+1])
+
+        for c in utils.split_cmd(p.commands):
             self._execute_cmd(client, c)
             if self.master and c[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
-                if self._bytes_offset == -1:
-                    self._bytes_offset = len(data)
+                if self._replica_offset == -1:
+                    self._replica_offset = len(data)
                 else:
-                    self._bytes_offset += len(data)
+                    self._replica_offset += len(data)
+
+        if self._handshake_done and handshake_pos == -1:
+            if self._bytes_offset == -1:
+                self._bytes_offset = len(data)
+            else:
+                self._bytes_offset += len(data)
 
         # If there is a GETACK, return bytes read before GETACK. Then add the rest
-        if self._bytes_offset != -1 and ack_pos >= 0:
-            self._bytes_offset += len(data[ack_end+1:])
+        # if self._bytes_offset != -1 and ack_pos >= 0:
+        #     self._bytes_offset += len(data[ack_end+1:])
 
     def serve_client(self, client):
         data = client.recv(1024)
         if data:
-            print(f"[serve_client] {data} {len(data)}")
             self._parse_data(client, data)
 
