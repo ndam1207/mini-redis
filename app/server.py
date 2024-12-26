@@ -347,7 +347,7 @@ class Server:
                     self._replica_offset = cmd_size
                 else:
                     self._replica_offset += cmd_size
-            if cmd[0] not in SKIP_LIST:
+            if cmd[0] not in self.SKIP_LIST:
                 if self._bytes_offset == -1:
                     self._bytes_offset = cmd_size
                 else:
