@@ -266,22 +266,21 @@ class Server:
             self._streams[stream_key] = io.Stream(stream_key)
         stream = self._streams[stream_key]
         entry_id = str(cmd[2])
+        if entry_id == "0-0":
+            client.send("-ERR The ID specified in XADD must be greater than 0-0\r\n".encode())
+            return
+        key = str(cmd[3])
+        val = str(cmd[4])
         ms, seq = entry_id.split("-")
         if seq == '*':
             seq = stream.generate_seq()
             entry_id = f"{ms}-{seq}"
-        idx = 3
-        if entry_id == "0-0":
-            client.send("-ERR The ID specified in XADD must be greater than 0-0\r\n".encode())
-            return
-        while idx < len(cmd):
-            key = str(cmd[idx])
-            val = str(cmd[idx+1])
+            stream.add_entry(entry_id, key, val)
+        else:
             if not stream.id_valid(entry_id):
                 client.send("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".encode())
                 return
-            stream.add_entry(entry_id, key, val)
-            idx += 2
+        stream.add_entry(entry_id, key, val)
 
         client.send(f"${len(entry_id)}\r\n{entry_id}\r\n".encode())
 
