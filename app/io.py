@@ -162,8 +162,16 @@ class Stream:
     def __init__(self, stream_key):
         self.stream_key = stream_key
         self._entries = deque()
-        self._ms_last = 0
+        self._ms_last = -1
         self._seq_num_last = -1
+
+    def generate_seq(self):
+        if self._seq_num_last == -1:
+            new_seq = 0
+        else:
+            new_seq = self._seq_num_last + 1
+        self._seq_num_last = new_seq
+        return new_seq
 
     def id_valid(self, id):
         ms, seq = id.split("-")

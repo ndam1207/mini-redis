@@ -9,7 +9,7 @@ class Server:
     DEFAULT_PORT = 6379
     EMPTY_RDB_FILE = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
     PROPAGATE_LIST = ['SET', 'DEL']
-    SKIP_LIST = ['REDIS0011']
+    SKIP_ACK_LIST = ['REDIS0011']
 
     def __init__(self, **kwargs):
         self.master = True
@@ -266,6 +266,10 @@ class Server:
             self._streams[stream_key] = io.Stream(stream_key)
         stream = self._streams[stream_key]
         entry_id = str(cmd[2])
+        ms, seq = entry_id.split("-")
+        if seq == '*':
+            seq = stream.generate_seq()
+            entry_id = f"{ms}-{seq}"
         idx = 3
         if entry_id == "0-0":
             client.send("-ERR The ID specified in XADD must be greater than 0-0\r\n".encode())
@@ -347,7 +351,7 @@ class Server:
                     self._replica_offset = cmd_size
                 else:
                     self._replica_offset += cmd_size
-            if cmd[0] not in self.SKIP_LIST:
+            if cmd[0] not in self.SKIP_ACK_LIST:
                 if self._bytes_offset == -1:
                     self._bytes_offset = cmd_size
                 else:
