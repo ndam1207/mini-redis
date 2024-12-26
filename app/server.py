@@ -275,7 +275,6 @@ class Server:
         if seq == '*':
             seq = stream.generate_seq()
             entry_id = f"{ms}-{seq}"
-            stream.add_entry(entry_id, key, val)
         else:
             if not stream.id_valid(entry_id):
                 client.send("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n".encode())
