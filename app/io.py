@@ -176,6 +176,8 @@ class Stream:
 
     def try_add_entry(self, id, key, val):
         if self.id_valid(id, key, val):
+            ms, seq = id.split("-")
+            self._ms_last, self._seq_num_last = int(ms), int(seq)
             self._entries.append(StreamEntry(id, key, val))
             return True
         return False
