@@ -1,4 +1,4 @@
-import os, time, collections
+import os, time
 from app import utils
 from collections import deque
 class RDB:
@@ -165,10 +165,15 @@ class Stream:
         self._ms_last = -1
         self._seq_num_last = -1
 
+    def generate_time_and_seq(self):
+        new_time = time.time()
+        new_seq = self.generate_seq(new_time)
+        return new_time, new_seq
+
     def generate_seq(self, time=-1):
         if time == 0 and self._seq_num_last == -1:
             new_seq = 1
-        elif time > 0 and time > self._ms_last :
+        elif time > 0 and time > self._ms_last:
             new_seq = 0
         else:
             new_seq = self._seq_num_last + 1
