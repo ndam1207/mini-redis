@@ -17,10 +17,10 @@ def readline(stream):
     return stream[:pos]
 
 def ms_to_s(ms):
-    return 0.001*int(ms)
+    return 0.001*float(ms)
 
 def s_to_ms(s):
-    return 1000.0*int(s)
+    return 1000.0*float(s)
 
 def get_type(var):
     var_type = type(var).__name__
