@@ -315,8 +315,9 @@ class Server:
         print("[_execute_xread]", start_id)
         stream_list = self._streams[stream_key].find_range(start_id, "+")
         resp = "*1\r\n"
-        resp += f"*{len(stream_list)}\r\n"
+        resp += "*2\r\n"
         resp += f"${len(stream_key)}\r\n{stream_key}\r\n"
+        resp += f"*{len(stream_list)}\r\n"
         for s in stream_list:
             print(s.id, s.kv_list)
             resp += "*2\r\n"
@@ -326,7 +327,7 @@ class Server:
             for key, val in kv_list:
                 resp += f"${len(str(key))}\r\n{str(key)}\r\n"
                 resp += f"${len(str(val))}\r\n{str(val)}\r\n"
-        print(resp)
+        print(resp.encode())
         client.send(resp.encode())
 
     def _execute_cmd(self, client, cmd):
