@@ -313,7 +313,7 @@ class Server:
         start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
         start_id = f"{start_time}-{start_seq+1}".strip()
         print("_execute_xread", start_id)
-        self._execute_xrange(client, [stream_key, start_id, '+'])
+        self._execute_xrange(client, ['XRANGE', stream_key, start_id, '+'])
 
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
