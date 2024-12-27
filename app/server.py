@@ -312,7 +312,7 @@ class Server:
         start_id = str(cmd[3])
         start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
         start_id = f"{start_time}-{start_seq+1}".strip()
-        print("_execute_xread", start_id)
+        print("[_execute_xread]", start_id)
         stream_list = self._streams[stream_key].find_range(start_id, "+")
         resp = "*1\r\n"
         resp += f"*{len(stream_list)}\r\n"
@@ -326,6 +326,7 @@ class Server:
             for key, val in kv_list:
                 resp += f"${len(str(key))}\r\n{str(key)}\r\n"
                 resp += f"${len(str(val))}\r\n{str(val)}\r\n"
+        print(resp)
         client.send(resp.encode())
 
     def _execute_cmd(self, client, cmd):
