@@ -308,6 +308,11 @@ class Server:
         client.send(resp.encode())
 
     def _execute_xread(self, client, cmd):
+        if str(cmd[1]) == 'BLOCK':
+            block_time = utils.ms_to_s(int(cmd[2]))
+            t = threading.Timer(block_time, self._execute_xread, args=(['XREAD'] + cmd[3:],))
+            t.start()
+            return
         num_streams = len(cmd[2:])//2
         resp = f"*{num_streams}\r\n"
         cmd = cmd[2:]
@@ -318,6 +323,9 @@ class Server:
             start_id = f"{start_time}-{start_seq+1}".strip()
             print("[_execute_xread]", start_id)
             stream_list = self._streams[stream_key].find_range(start_id, "+")
+            if not stream_list:
+                client.send("$-1\r\n".encode())
+                return
             resp += "*2\r\n"
             resp += f"${len(stream_key)}\r\n{stream_key}\r\n"
             resp += f"*{len(stream_list)}\r\n"
