@@ -208,11 +208,7 @@ class Stream:
             if start_time < e_time < end_time:
                 stream_list.append(e)
             elif start_time == e_time and start_seq <= e_seq <= end_seq:
-                # print("start_time == e_time and start_seq <= e_seq")
-                # print(e_time, e_seq)
                 stream_list.append(e)
             elif end_time == e_time and start_seq <= e_seq <= end_seq:
-                # print("end_time == e_time and e_seq <= end_seq")
-                # print(e_time, e_seq)
                 stream_list.append(e)
         return stream_list

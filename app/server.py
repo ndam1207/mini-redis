@@ -22,8 +22,7 @@ class Server:
         self._port = Server.DEFAULT_PORT
         self._rdb_snapshot = None
         self.replica_lock = threading.Lock()
-        # Client + bytes offset (if client is a replica)
-        self._connections = {}
+        self._connections = {} # Client + bytes offset (if client is a replica)
         self._bytes_offset = -1
         self._replica_offset = -1
         self._handshake_done = False
@@ -71,9 +70,6 @@ class Server:
         print(resp)
         # PSYNC
         self.master_socket.send(f"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n".encode())
-        # resp = self.master_socket.recv(1024)
-        # print(resp)
-        # self._parse_data(self.master_socket, resp)
 
         if self.master_socket not in self._connections:
             self._connections[self.master_socket] = -1
@@ -311,6 +307,14 @@ class Server:
                 resp += f"${len(str(val))}\r\n{str(val)}\r\n"
         client.send(resp.encode())
 
+    def _execute_xread(self, client, cmd):
+        stream_key = str(cmd[2])
+        start_id = str(cmd[3])
+        start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
+        start_id = f"{start_time}-{start_seq+1}".strip()
+        print("_execute_xread", start_id)
+        self._execute_xrange(client, [stream_key, start_id, '+'])
+
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
         cmd[0] = cmd[0].upper()
@@ -342,7 +346,8 @@ class Server:
             self._execute_xadd(client, cmd)
         elif cmd[0] == 'XRANGE':
             self._execute_xrange(client, cmd)
-
+        elif cmd[0] == 'XREAD':
+            self._execute_xread(client, cmd)
 
     def _count_acks_from_wait(self, client):
         num_acks = 0
@@ -365,7 +370,6 @@ class Server:
     def _parse_data(self, client, data):
         p = parser.Parser(data)
         p.parse_data()
-        # print(f"[_parse_data] handshake={self._handshake_done} {data} {len(data)}")
         for c in (p.commands):
             cmd, cmd_size = c.buffer, c.size
             if not cmd:
