@@ -313,7 +313,20 @@ class Server:
         start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
         start_id = f"{start_time}-{start_seq+1}".strip()
         print("_execute_xread", start_id)
-        self._execute_xrange(client, ['XRANGE', stream_key, start_id, '+'])
+        stream_list = self._streams[stream_key].find_range(start_id, "+")
+        resp = "*1\r\n"
+        resp += f"*{len(stream_list)}\r\n"
+        resp += f"${len(stream_key)}\r\n{stream_key}\r\n"
+        for s in stream_list:
+            print(s.id, s.kv_list)
+            resp += "*2\r\n"
+            id, kv_list = s.id, s.kv_list
+            resp += f"${len(str(id))}\r\n{str(id)}\r\n"
+            resp += f"*{len(kv_list)*2}\r\n"
+            for key, val in kv_list:
+                resp += f"${len(str(key))}\r\n{str(key)}\r\n"
+                resp += f"${len(str(val))}\r\n{str(val)}\r\n"
+        client.send(resp.encode())
 
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
