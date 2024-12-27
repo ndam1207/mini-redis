@@ -308,26 +308,28 @@ class Server:
         client.send(resp.encode())
 
     def _execute_xread(self, client, cmd):
-        stream_key = str(cmd[2])
-        start_id = str(cmd[3])
-        start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
-        start_id = f"{start_time}-{start_seq+1}".strip()
-        print("[_execute_xread]", start_id)
-        stream_list = self._streams[stream_key].find_range(start_id, "+")
-        resp = "*1\r\n"
-        resp += "*2\r\n"
-        resp += f"${len(stream_key)}\r\n{stream_key}\r\n"
-        resp += f"*{len(stream_list)}\r\n"
-        for s in stream_list:
-            print(s.id, s.kv_list)
+        num_streams = len(cmd[2:])//2
+        resp = f"*{num_streams}\r\n"
+        cmd = cmd[2:]
+        for i in range(num_streams):
+            stream_key = str(cmd[i])
+            start_id = str(cmd[i+num_streams])
+            start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
+            start_id = f"{start_time}-{start_seq+1}".strip()
+            print("[_execute_xread]", start_id)
+            stream_list = self._streams[stream_key].find_range(start_id, "+")
             resp += "*2\r\n"
-            id, kv_list = s.id, s.kv_list
-            resp += f"${len(str(id))}\r\n{str(id)}\r\n"
-            resp += f"*{len(kv_list)*2}\r\n"
-            for key, val in kv_list:
-                resp += f"${len(str(key))}\r\n{str(key)}\r\n"
-                resp += f"${len(str(val))}\r\n{str(val)}\r\n"
-        print(resp.encode())
+            resp += f"${len(stream_key)}\r\n{stream_key}\r\n"
+            resp += f"*{len(stream_list)}\r\n"
+            for s in stream_list:
+                # print(s.id, s.kv_list)
+                resp += "*2\r\n"
+                id, kv_list = s.id, s.kv_list
+                resp += f"${len(str(id))}\r\n{str(id)}\r\n"
+                resp += f"*{len(kv_list)*2}\r\n"
+                for key, val in kv_list:
+                    resp += f"${len(str(key))}\r\n{str(key)}\r\n"
+                    resp += f"${len(str(val))}\r\n{str(val)}\r\n"
         client.send(resp.encode())
 
     def _execute_cmd(self, client, cmd):
