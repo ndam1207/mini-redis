@@ -313,6 +313,7 @@ class Server:
             t = threading.Timer(block_time, self._execute_xread, args=(['XREAD'] + cmd[3:],))
             t.start()
             return
+        print("[_execute_xread]", cmd)
         num_streams = len(cmd[2:])//2
         resp = f"*{num_streams}\r\n"
         cmd = cmd[2:]
