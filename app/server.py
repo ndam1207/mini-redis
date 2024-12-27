@@ -308,7 +308,7 @@ class Server:
         client.send(resp.encode())
 
     def _execute_xread(self, client, cmd):
-        if str(cmd[1]) == 'BLOCK':
+        if str(cmd[1]).upper() == 'BLOCK':
             block_time = utils.ms_to_s(int(cmd[2]))
             t = threading.Timer(block_time, self._execute_xread, args=(['XREAD'] + cmd[3:],))
             t.start()
