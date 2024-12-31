@@ -499,7 +499,7 @@ class Server:
             cmd, cmd_size = c.buffer, c.size
             if not cmd:
                 continue
-            if self._multi:
+            if self._multi and cmd[0] != 'EXEC':
                 self._multi_queue.append(cmd)
                 client.send("+QUEUED\r\n".encode())
             else:
