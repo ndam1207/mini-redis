@@ -422,6 +422,9 @@ class Server:
         client.send("+OK\r\n".encode())
 
     def _execute_exec(self, client):
+        if self._multi and not self._multi_queue:
+            client.send("-ERR EXEC without MULTI\r\n".encode())
+            return
         self._multi = False
         for c in self._multi_queue:
             self._execute_cmd(client, c)
@@ -494,6 +497,7 @@ class Server:
                 continue
             if self._multi:
                 self._multi_queue.append(cmd)
+                client.send("+QUEUED\r\n".encode())
             else:
                 self._execute_cmd(client, cmd)
             if self.master and cmd[0] in Server.PROPAGATE_LIST:
