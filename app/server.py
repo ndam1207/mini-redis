@@ -423,7 +423,7 @@ class Server:
 
     def _execute_exec(self, client):
         print("_execute_exec")
-        if self._multi and not self._multi_queue:
+        if not self._multi:
             client.send("-ERR EXEC without MULTI\r\n".encode())
             return
         self._multi = False
