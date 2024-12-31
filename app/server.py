@@ -392,7 +392,7 @@ class Server:
 
     def _execute_incr(self, client, cmd):
         key = cmd[1]
-        v = ""
+        v = -1
         if key in self._cache:
             v = self._cache[key]
         else:
@@ -401,10 +401,14 @@ class Server:
                 self._cache[k] = v
 
         print(f"[_execute_incr] cmd = {cmd} key={cmd[1]}, val={v}\n")
-        if not v:
-            v = "1"
+        print("v = ", v, type(v).__name__)
+        if v == -1:
+            v = 1
         else:
-            v = str(int(v) + 1)
+            if type(v).__name__ != 'int':
+                client.send("-ERR value is not an integer or out of range\r\n".encode())
+                return
+            v += 1
         print("Saving to cache")
         self._cache[key] = v
         if self._rdb_snapshot:
