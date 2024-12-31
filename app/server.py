@@ -29,6 +29,8 @@ class Server:
         self._streams = {}
         self._xadd_conditions = {}
         self._xadd_latest = None
+        self._multi_queue = []
+        self._multi = False
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -415,6 +417,16 @@ class Server:
             self._rdb_snapshot.set_val(key, v)
         client.send(f":{str(v)}\r\n".encode())
 
+    def _execute_multi(self, client):
+        self._multi = True
+        client.send("+OK\r\n".encode())
+
+    def _execute_exec(self, client):
+        self._multi = False
+        for c in self._multi_queue:
+            self._execute_cmd(client, c)
+        self._multi_queue = []
+
     def _execute_cmd(self, client, cmd):
         # print(f"[_execute_cmd] cmd={cmd}\n")
         cmd[0] = cmd[0].upper()
@@ -450,6 +462,10 @@ class Server:
             self._execute_xread(client, cmd)
         elif cmd[0] == 'INCR':
             self._execute_incr(client, cmd)
+        elif cmd[0] == 'MULTI':
+            self._execute_multi(client)
+        elif cmd[0] == 'EXEC':
+            self._execute_exec(client)
 
     def _count_acks_from_wait(self, client):
         num_acks = 0
@@ -476,7 +492,10 @@ class Server:
             cmd, cmd_size = c.buffer, c.size
             if not cmd:
                 continue
-            self._execute_cmd(client, cmd)
+            if self._multi:
+                self._multi_queue.append(cmd)
+            else:
+                self._execute_cmd(client, cmd)
             if self.master and cmd[0] in Server.PROPAGATE_LIST:
                 self._broadcast(data)
                 if self._replica_offset == -1:
