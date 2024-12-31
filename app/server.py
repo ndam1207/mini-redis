@@ -405,7 +405,7 @@ class Server:
         if v == -1:
             v = 1
         else:
-            if type(v).__name__ != 'int':
+            if not v.isdigit():
                 client.send("-ERR value is not an integer or out of range\r\n".encode())
                 return
             v += 1
