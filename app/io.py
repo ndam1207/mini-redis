@@ -188,7 +188,7 @@ class Stream:
         return False
 
     def add_entry(self, id, kv_list):
-        print("[add_entry]", id)
+        # print("[add_entry]", id)
         ms, seq = id.split("-")[0], id.split("-")[1]
         self._ms_last, self._seq_num_last = int(ms), int(seq)
         self.entries.append(StreamEntry(id, kv_list))

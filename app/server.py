@@ -28,6 +28,7 @@ class Server:
         self._handshake_done = False
         self._streams = {}
         self._xadd_conditions = {}
+        self._xadd_latest = None
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -287,14 +288,17 @@ class Server:
             idx += 2
         stream.add_entry(entry_id, kv_list)
         time, seq = int(entry_id.split("-")[0]), int(entry_id.split("-")[1])
-        for e in self._xadd_conditions.keys():
-            print("wait ids", e)
-            e_time, e_seq = int(e.split("-")[0]), int(e.split("-")[1])
-            if seq > e_seq:
-                print("signaling ", e, self._xadd_conditions[e])
-                with self._xadd_conditions[e]:
-                    self._xadd_conditions[e].notify_all()
+        e_time, e_seq = 0, 0
+        self._xadd_latest = entry_id
 
+        for e_id in self._xadd_conditions.keys():
+            print("wait ids", e_id)
+            if e_id != '$':
+                e_time, e_seq = int(e_id.split("-")[0]), int(e_id.split("-")[1])
+            if seq > e_seq or e_id == '$':
+                print("signaling ", e_id, self._xadd_conditions[e_id])
+                with self._xadd_conditions[e_id]:
+                    self._xadd_conditions[e_id].notify_all()
         client.send(f"${len(entry_id)}\r\n{entry_id}\r\n".encode())
 
     def _execute_xrange(self, client, cmd):
@@ -319,32 +323,45 @@ class Server:
 
     def _execute_xread(self, client, cmd):
         if str(cmd[1]).upper() == 'BLOCK':
+            block_time = utils.ms_to_s(int(cmd[2]))
             stream_key = str(cmd[4])
             stream_id = str(cmd[5])
-            stream_list = self._streams[stream_key].find_range_start_exclusive(stream_id)
-            block_time = utils.ms_to_s(int(cmd[2]))
+            stream_list = []
+            if stream_id != '$':
+                stream_list = self._streams[stream_key].find_range_start_exclusive(stream_id)
             print("[_execute_xread] with block", stream_id, block_time)
-            if block_time == 0:
-                if not stream_list:
-                    self._xadd_conditions[stream_id] = threading.Condition(threading.Lock())
-                    t = threading.Thread(target=self._wait_for_xadd_and_read, args=(stream_key, stream_id, client, cmd[4:]))
-                    t.start()
-                    return
-            else:
-                t = threading.Timer(block_time, self._handle_xread, args=(client, cmd[4:]))
+            cmd = cmd[4:]
+            if not stream_list:
+                self._xadd_conditions[stream_id] = threading.Condition(threading.Lock())
+                t = threading.Thread(target=self._wait_for_xadd_and_read, args=(client, stream_key, stream_id, block_time, cmd))
                 t.start()
                 return
-        self._handle_xread(client, cmd[2:])
+        else:
+            cmd = cmd[2:]
+        self._handle_xread(client, cmd)
 
 
-    def _wait_for_xadd_and_read(self, stream_key, stream_id, client, cmd):
+    def _wait_for_xadd_and_read(self, client, stream_key, stream_id, block_time, cmd):
         with self._xadd_conditions[stream_id]:
             print("[_wait_for_xadd_and_read]", stream_key, stream_id)
             # stream_list = self._streams[stream_key].find_range_start_exclusive(stream_id)
             # while not stream_list:
-            self._xadd_conditions[stream_id].wait()
+            timeout = block_time if block_time > 0 else None
+            self._xadd_conditions[stream_id].wait(timeout)
         print("Done for xadd")
-        # del self._xadd_conditions[stream_id]
+        if stream_id == '$':
+            start_time, start_seq = int(self._xadd_latest.split("-")[0]), int(self._xadd_latest.split("-")[1])
+            if start_seq > 0:
+                start_seq -= 1
+            start_id = f"{start_time}-{start_seq}".strip()
+            cmd[-1] = start_id
+            print("Latest =", self._xadd_latest, start_id)
+            del self._xadd_conditions['$']
+        if block_time > 0:
+            stream_list = self._streams[stream_key].find_range_start_exclusive(stream_id)
+            if not stream_list:
+                client.send("$-1\r\n".encode())
+                return
         self._handle_xread(client, cmd)
 
     def _handle_xread(self, client, cmd):
@@ -374,7 +391,7 @@ class Server:
         client.send(resp.encode())
 
     def _execute_cmd(self, client, cmd):
-        print(f"[_execute_cmd] cmd={cmd}\n")
+        # print(f"[_execute_cmd] cmd={cmd}\n")
         cmd[0] = cmd[0].upper()
         if cmd[0] == 'PING':
             self._execute_ping(client)
@@ -444,7 +461,6 @@ class Server:
                     self._bytes_offset = cmd_size
                 else:
                     self._bytes_offset += cmd_size
-                # print(cmd, cmd_size, self._bytes_offset)
 
     def serve_client(self, client):
         data = client.recv(1024)
