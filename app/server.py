@@ -8,7 +8,7 @@ from collections import defaultdict
 class Server:
     DEFAULT_PORT = 6379
     EMPTY_RDB_FILE = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
-    PROPAGATE_LIST = ['SET', 'DEL']
+    PROPAGATE_LIST = ['SET', 'DEL', 'INCR']
     SKIP_ACK_LIST = ['REDIS0011']
 
     def __init__(self, **kwargs):
@@ -390,6 +390,23 @@ class Server:
                     resp += f"${len(str(val))}\r\n{str(val)}\r\n"
         client.send(resp.encode())
 
+    def _execute_incr(self, client, cmd):
+        key = cmd[1]
+        v = ""
+        if key in self._cache:
+            v = self._cache[key]
+        else:
+            if self._rdb_snapshot:
+                k, v, expiry = self._rdb_snapshot.get_val(key)
+                self._cache[k] = v
+
+        print(f"[_execute_incr] cmd = {cmd} key={cmd[1]}\n")
+        if not v:
+            client.send(b"$-1\r\n")
+            return
+        v = int(v) + 1
+        client.send(f":{str(v)}\r\n".encode())
+
     def _execute_cmd(self, client, cmd):
         # print(f"[_execute_cmd] cmd={cmd}\n")
         cmd[0] = cmd[0].upper()
@@ -423,6 +440,8 @@ class Server:
             self._execute_xrange(client, cmd)
         elif cmd[0] == 'XREAD':
             self._execute_xread(client, cmd)
+        elif cmd[0] == 'INCR':
+            self._execute_incr(client, cmd)
 
     def _count_acks_from_wait(self, client):
         num_acks = 0
