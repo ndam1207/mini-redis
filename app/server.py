@@ -426,12 +426,12 @@ class Server:
         if not self._multi:
             client.send("-ERR EXEC without MULTI\r\n".encode())
             return
+        self._multi = False
         if len(self._multi_queue) == 0:
             client.send("*0\r\n".encode())
             return
         for c in self._multi_queue:
             self._execute_cmd(client, c)
-        self._multi = False
         self._multi_queue = []
 
     def _execute_cmd(self, client, cmd):
