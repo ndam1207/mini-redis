@@ -405,10 +405,10 @@ class Server:
         if v == -1:
             v = 1
         else:
-            if not v.isdigit():
+            if type(v).__name__ != 'int' and not v.isdigit():
                 client.send("-ERR value is not an integer or out of range\r\n".encode())
                 return
-            v += 1
+            v = int(v) + 1
         print("Saving to cache")
         self._cache[key] = v
         if self._rdb_snapshot:
