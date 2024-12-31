@@ -152,7 +152,7 @@ class Server:
         if not v:
             client.send(b"$-1\r\n")
             return
-        resp = f"${len(v)}\r\n{v}\r\n"
+        resp = f"${len(str(v))}\r\n{str(v)}\r\n"
         client.send(resp.encode())
 
     def _execute_set(self, client, cmd):
@@ -400,11 +400,15 @@ class Server:
                 k, v, expiry = self._rdb_snapshot.get_val(key)
                 self._cache[k] = v
 
-        print(f"[_execute_incr] cmd = {cmd} key={cmd[1]}\n")
+        print(f"[_execute_incr] cmd = {cmd} key={cmd[1]}, val={v}\n")
         if not v:
-            client.send(b"$-1\r\n")
-            return
-        v = int(v) + 1
+            v = "1"
+        else:
+            v = str(int(v) + 1)
+        print("Saving to cache")
+        self._cache[key] = v
+        if self._rdb_snapshot:
+            self._rdb_snapshot.set_val(key, v)
         client.send(f":{str(v)}\r\n".encode())
 
     def _execute_cmd(self, client, cmd):
