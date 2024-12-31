@@ -212,3 +212,9 @@ class Stream:
             elif end_time == e_time and start_seq <= e_seq <= end_seq:
                 stream_list.append(e)
         return stream_list
+
+    def find_range_start_exclusive(self, stream_id):
+        start_time, start_seq = int(stream_id.split("-")[0]), int(stream_id.split("-")[1])
+        start_id = f"{start_time}-{start_seq+1}".strip()
+        stream_list = self.find_range(start_id, "+")
+        return stream_list

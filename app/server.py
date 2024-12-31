@@ -27,6 +27,7 @@ class Server:
         self._replica_offset = -1
         self._handshake_done = False
         self._streams = {}
+        self._xadd_conditions = {}
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -257,7 +258,7 @@ class Server:
             client.send(f"+{val_type}\r\n".encode())
 
     def _execute_xadd(self, client, cmd):
-        print("execute xadd")
+        print("[_execute_xadd]", cmd)
         stream_key = str(cmd[1])
         if stream_key not in self._streams:
             self._streams[stream_key] = io.Stream(stream_key)
@@ -285,6 +286,15 @@ class Server:
             kv_list.append((key, val))
             idx += 2
         stream.add_entry(entry_id, kv_list)
+        time, seq = int(entry_id.split("-")[0]), int(entry_id.split("-")[1])
+        for e in self._xadd_conditions.keys():
+            print("wait ids", e)
+            e_time, e_seq = int(e.split("-")[0]), int(e.split("-")[1])
+            if seq > e_seq:
+                print("signaling ", e, self._xadd_conditions[e])
+                with self._xadd_conditions[e]:
+                    self._xadd_conditions[e].notify_all()
+
         client.send(f"${len(entry_id)}\r\n{entry_id}\r\n".encode())
 
     def _execute_xrange(self, client, cmd):
@@ -309,21 +319,43 @@ class Server:
 
     def _execute_xread(self, client, cmd):
         if str(cmd[1]).upper() == 'BLOCK':
+            stream_key = str(cmd[4])
+            stream_id = str(cmd[5])
+            stream_list = self._streams[stream_key].find_range_start_exclusive(stream_id)
             block_time = utils.ms_to_s(int(cmd[2]))
-            t = threading.Timer(block_time, self._execute_xread, args=(client, ['XREAD'] + cmd[3:],))
-            t.start()
-            return
-        print("[_execute_xread]", cmd)
-        num_streams = len(cmd[2:])//2
+            print("[_execute_xread] with block", stream_id, block_time)
+            if block_time == 0:
+                if not stream_list:
+                    self._xadd_conditions[stream_id] = threading.Condition(threading.Lock())
+                    t = threading.Thread(target=self._wait_for_xadd_and_read, args=(stream_key, stream_id, client, cmd[4:]))
+                    t.start()
+                    return
+            else:
+                t = threading.Timer(block_time, self._handle_xread, args=(client, cmd[4:]))
+                t.start()
+                return
+        self._handle_xread(client, cmd[2:])
+
+
+    def _wait_for_xadd_and_read(self, stream_key, stream_id, client, cmd):
+        with self._xadd_conditions[stream_id]:
+            print("[_wait_for_xadd_and_read]", stream_key, stream_id)
+            # stream_list = self._streams[stream_key].find_range_start_exclusive(stream_id)
+            # while not stream_list:
+            self._xadd_conditions[stream_id].wait()
+        print("Done for xadd")
+        # del self._xadd_conditions[stream_id]
+        self._handle_xread(client, cmd)
+
+    def _handle_xread(self, client, cmd):
+        print("[_handle_xread]", cmd)
+        num_streams = len(cmd)//2
         resp = f"*{num_streams}\r\n"
-        cmd = cmd[2:]
         for i in range(num_streams):
             stream_key = str(cmd[i])
             start_id = str(cmd[i+num_streams])
-            start_time, start_seq = int(start_id.split("-")[0]), int(start_id.split("-")[1])
-            start_id = f"{start_time}-{start_seq+1}".strip()
-            print("[_execute_xread]", start_id)
-            stream_list = self._streams[stream_key].find_range(start_id, "+")
+            print("[_handle_xread]", start_id)
+            stream_list = self._streams[stream_key].find_range_start_exclusive(start_id)
             if not stream_list:
                 client.send("$-1\r\n".encode())
                 return
