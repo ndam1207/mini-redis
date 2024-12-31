@@ -422,6 +422,7 @@ class Server:
         client.send("+OK\r\n".encode())
 
     def _execute_exec(self, client):
+        print("_execute_exec")
         if self._multi and not self._multi_queue:
             client.send("-ERR EXEC without MULTI\r\n".encode())
             return
@@ -431,7 +432,7 @@ class Server:
         self._multi_queue = []
 
     def _execute_cmd(self, client, cmd):
-        # print(f"[_execute_cmd] cmd={cmd}\n")
+        print(f"[_execute_cmd] cmd={cmd}\n")
         cmd[0] = cmd[0].upper()
         if cmd[0] == 'PING':
             self._execute_ping(client)
