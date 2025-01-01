@@ -29,8 +29,8 @@ class Server:
         self._streams = {}
         self._xadd_conditions = {}
         self._xadd_latest = None
-        self._multi_queue = []
-        self._multi = False
+        self._multi_queue = defaultdict(list)
+        self._multi = {}
         self._parse_args(**kwargs)
 
     def _parse_args(self, **kwargs):
@@ -342,7 +342,6 @@ class Server:
             cmd = cmd[2:]
         self._handle_xread(client, cmd)
 
-
     def _wait_for_xadd_and_read(self, client, stream_key, stream_id, block_time, cmd):
         with self._xadd_conditions[stream_id]:
             print("[_wait_for_xadd_and_read]", stream_key, stream_id)
@@ -418,21 +417,21 @@ class Server:
         client.send(f":{str(v)}\r\n".encode())
 
     def _execute_multi(self, client):
-        self._multi = True
+        self._multi[client] = True
         client.send("+OK\r\n".encode())
 
     def _execute_exec(self, client):
         print("_execute_exec")
-        if not self._multi:
+        if client not in self._multi or not self._multi[client]:
             client.send("-ERR EXEC without MULTI\r\n".encode())
             return
-        self._multi = False
-        if len(self._multi_queue) == 0:
+        self._multi[client] = False
+        if len(self._multi_queue[client]) == 0:
             client.send("*0\r\n".encode())
             return
-        for c in self._multi_queue:
+        for c in self._multi_queue[client]:
             self._execute_cmd(client, c)
-        self._multi_queue = []
+        self._multi_queue[client] = []
 
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
@@ -499,8 +498,8 @@ class Server:
             cmd, cmd_size = c.buffer, c.size
             if not cmd:
                 continue
-            if self._multi and cmd[0] != 'EXEC':
-                self._multi_queue.append(cmd)
+            if self._multi.get(client, None) and cmd[0] != 'EXEC':
+                self._multi_queue[client].append(cmd)
                 client.send("+QUEUED\r\n".encode())
             else:
                 self._execute_cmd(client, cmd)
