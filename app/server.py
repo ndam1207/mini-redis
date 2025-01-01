@@ -429,6 +429,7 @@ class Server:
         if len(self._multi_queue[client]) == 0:
             client.send("*0\r\n".encode())
             return
+        client.send(f"*{len(self._multi_queue[client])}\r\n".encode())
         for c in self._multi_queue[client]:
             self._execute_cmd(client, c)
         self._multi_queue[client] = []
