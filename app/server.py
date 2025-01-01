@@ -421,7 +421,7 @@ class Server:
         client.send("+OK\r\n".encode())
 
     def _execute_exec(self, client):
-        print("_execute_exec")
+        print("[_execute_exec]")
         if client not in self._multi or not self._multi[client]:
             client.send("-ERR EXEC without MULTI\r\n".encode())
             return
@@ -433,6 +433,14 @@ class Server:
         for c in self._multi_queue[client]:
             self._execute_cmd(client, c)
         self._multi_queue[client] = []
+
+    def _execute_discard(self, client):
+        print("[_execute_discard]")
+        if client not in self._multi or not self._multi[client]:
+            client.send("-ERR DISCARD without MULTI\r\n".encode())
+            return
+        self._multi[client] = False
+        client.send("+OK\r\n".encode())
 
     def _execute_cmd(self, client, cmd):
         print(f"[_execute_cmd] cmd={cmd}\n")
@@ -473,6 +481,8 @@ class Server:
             self._execute_multi(client)
         elif cmd[0] == 'EXEC':
             self._execute_exec(client)
+        elif cmd[0] == 'DISCARD':
+            self._execute_discard(client)
 
     def _count_acks_from_wait(self, client):
         num_acks = 0
@@ -499,7 +509,7 @@ class Server:
             cmd, cmd_size = c.buffer, c.size
             if not cmd:
                 continue
-            if self._multi.get(client, None) and cmd[0] != 'EXEC':
+            if self._multi.get(client, None) and cmd[0] not in ['EXEC', 'DISCARD']:
                 self._multi_queue[client].append(cmd)
                 client.send("+QUEUED\r\n".encode())
             else:
